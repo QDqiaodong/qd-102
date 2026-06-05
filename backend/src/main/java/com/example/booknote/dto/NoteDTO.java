@@ -24,6 +24,9 @@ public class NoteDTO {
     private List<TagDTO> tags;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private String highlightedTitle;
+    private String highlightedContent;
+    private String highlightedTags;
     
     public static NoteDTO fromEntity(Note note) {
         NoteDTO dto = new NoteDTO();

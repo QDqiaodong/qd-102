@@ -18,6 +18,8 @@ public class BookDTO {
     private String status;
     private Integer progress;
     private String description;
+    private String highlightedTitle;
+    private String highlightedContent;
     
     public static BookDTO fromEntity(Book book) {
         BookDTO dto = new BookDTO();

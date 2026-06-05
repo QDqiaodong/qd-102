@@ -41,10 +41,21 @@ public class SearchController {
         for (SearchService.SearchResult result : results) {
             if ("book".equals(result.getType())) {
                 Optional<Book> book = bookRepository.findById(result.getId());
-                book.ifPresent(b -> books.add(BookDTO.fromEntity(b)));
+                book.ifPresent(b -> {
+                    BookDTO dto = BookDTO.fromEntity(b);
+                    dto.setHighlightedTitle(result.getHighlightedTitle());
+                    dto.setHighlightedContent(result.getHighlightedContent());
+                    books.add(dto);
+                });
             } else if ("note".equals(result.getType())) {
                 Optional<Note> note = noteRepository.findById(result.getId());
-                note.ifPresent(n -> notes.add(NoteDTO.fromEntity(n)));
+                note.ifPresent(n -> {
+                    NoteDTO dto = NoteDTO.fromEntity(n);
+                    dto.setHighlightedTitle(result.getHighlightedTitle());
+                    dto.setHighlightedContent(result.getHighlightedContent());
+                    dto.setHighlightedTags(result.getHighlightedTags());
+                    notes.add(dto);
+                });
             }
         }
         

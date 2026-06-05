@@ -3,8 +3,10 @@ package com.example.booknote.service;
 
 import com.example.booknote.entity.Book;
 import com.example.booknote.entity.Note;
+import com.example.booknote.entity.Tag;
 import com.example.booknote.repository.BookRepository;
 import com.example.booknote.repository.NoteRepository;
+import com.example.booknote.repository.TagRepository;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -21,6 +23,11 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.highlight.Formatter;
+import org.apache.lucene.search.highlight.Highlighter;
+import org.apache.lucene.search.highlight.QueryScorer;
+import org.apache.lucene.search.highlight.SimpleHTMLFormatter;
+import org.apache.lucene.search.highlight.SimpleSpanFragmenter;
 import org.apache.lucene.store.Directory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -29,6 +36,7 @@ import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class SearchService {
@@ -44,6 +52,9 @@ public class SearchService {
     
     @Autowired
     private NoteRepository noteRepository;
+    
+    @Autowired
+    private TagRepository tagRepository;
     
     @PostConstruct
     public void init() throws IOException {
@@ -73,6 +84,9 @@ public class SearchService {
                 doc.add(new StringField("type", "note", Field.Store.YES));
                 doc.add(new StringField("id", note.getId().toString(), Field.Store.YES));
                 doc.add(new TextField("title", note.getTitle(), Field.Store.YES));
+                String tagNames = note.getTags() != null ? 
+                    note.getTags().stream().map(Tag::getName).collect(Collectors.joining(" ")) : "";
+                doc.add(new TextField("tags", tagNames, Field.Store.YES));
                 doc.add(new TextField("content", note.getContent() != null ? note.getContent() : "", Field.Store.YES));
                 writer.addDocument(doc);
             }
@@ -85,7 +99,7 @@ public class SearchService {
         try (IndexReader reader = DirectoryReader.open(directory)) {
             IndexSearcher searcher = new IndexSearcher(reader);
             
-            String[] fields = {"title", "author", "description", "content"};
+            String[] fields = {"title", "author", "description", "content", "tags"};
             MultiFieldQueryParser parser = new MultiFieldQueryParser(fields, analyzer);
             parser.setDefaultOperator(QueryParser.Operator.OR);
             
@@ -97,12 +111,45 @@ public class SearchService {
             }
             TopDocs topDocs = searcher.search(query, 50);
             
+            Formatter formatter = new SimpleHTMLFormatter("[[HIGHLIGHT]]", "[[/HIGHLIGHT]]");
+            QueryScorer scorer = new QueryScorer(query);
+            Highlighter highlighter = new Highlighter(formatter, scorer);
+            highlighter.setTextFragmenter(new SimpleSpanFragmenter(scorer, 200));
+            
             for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
                 Document doc = searcher.doc(scoreDoc.doc);
                 SearchResult result = new SearchResult();
                 result.setType(doc.get("type"));
                 result.setId(Long.parseLong(doc.get("id")));
                 result.setTitle(doc.get("title"));
+                
+                try {
+                    String highlightedTitle = highlighter.getBestFragment(analyzer, "title", doc.get("title"));
+                    result.setHighlightedTitle(highlightedTitle != null ? highlightedTitle : doc.get("title"));
+                    
+                    if ("note".equals(result.getType())) {
+                        String content = doc.get("content");
+                        String plainContent = content.replaceAll("<[^>]*>", " ");
+                        String highlightedContent = highlighter.getBestFragment(analyzer, "content", plainContent);
+                        if (highlightedContent == null && plainContent.length() > 0) {
+                            highlightedContent = plainContent.substring(0, Math.min(150, plainContent.length())) + "...";
+                        }
+                        result.setHighlightedContent(highlightedContent);
+                        
+                        String highlightedTags = highlighter.getBestFragment(analyzer, "tags", doc.get("tags"));
+                        result.setHighlightedTags(highlightedTags);
+                    } else if ("book".equals(result.getType())) {
+                        String description = doc.get("description");
+                        String highlightedDesc = highlighter.getBestFragment(analyzer, "description", description);
+                        if (highlightedDesc == null && description != null && description.length() > 0) {
+                            highlightedDesc = description.substring(0, Math.min(150, description.length())) + "...";
+                        }
+                        result.setHighlightedContent(highlightedDesc);
+                    }
+                } catch (Exception e) {
+                    result.setHighlightedTitle(result.getTitle());
+                }
+                
                 results.add(result);
             }
         }
@@ -114,6 +161,9 @@ public class SearchService {
         private String type;
         private Long id;
         private String title;
+        private String highlightedTitle;
+        private String highlightedContent;
+        private String highlightedTags;
         
         public String getType() { return type; }
         public void setType(String type) { this.type = type; }
@@ -121,5 +171,11 @@ public class SearchService {
         public void setId(Long id) { this.id = id; }
         public String getTitle() { return title; }
         public void setTitle(String title) { this.title = title; }
+        public String getHighlightedTitle() { return highlightedTitle; }
+        public void setHighlightedTitle(String highlightedTitle) { this.highlightedTitle = highlightedTitle; }
+        public String getHighlightedContent() { return highlightedContent; }
+        public void setHighlightedContent(String highlightedContent) { this.highlightedContent = highlightedContent; }
+        public String getHighlightedTags() { return highlightedTags; }
+        public void setHighlightedTags(String highlightedTags) { this.highlightedTags = highlightedTags; }
     }
 }

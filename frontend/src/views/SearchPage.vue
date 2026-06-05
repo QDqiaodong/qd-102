@@ -7,7 +7,7 @@
         <input 
           v-model="keyword" 
           type="text" 
-          placeholder="搜索书籍、笔记..."
+          placeholder="搜索书籍、笔记、标签..."
           @keyup.enter="performSearch"
           class="search-input"
         />
@@ -25,8 +25,9 @@
             <div v-for="book in books" :key="book.id" class="book-result-item" @click="viewBook(book.id)">
               <img :src="book.coverUrl || 'https://via.placeholder.com/80x100?text=No+Cover'" :alt="book.title" />
               <div class="book-info">
-                <h3>{{ book.title }}</h3>
+                <h3 v-html="highlightText(book.highlightedTitle || book.title)"></h3>
                 <p>{{ book.author }}</p>
+                <p v-if="book.highlightedContent" class="book-highlight-desc" v-html="highlightText(book.highlightedContent)"></p>
               </div>
             </div>
           </div>
@@ -37,8 +38,9 @@
           <div class="notes-results">
             <div v-for="note in notes" :key="note.id" class="note-result-item" @click="viewNote(note)">
               <div class="note-info">
-                <h3>{{ note.title }}</h3>
-                <p>{{ getPreview(note.content) }}</p>
+                <h3 v-html="highlightText(note.highlightedTitle || note.title)"></h3>
+                <p v-if="note.highlightedContent" v-html="highlightText(note.highlightedContent)" class="highlight-content"></p>
+                <p v-else>{{ getPreview(note.content) }}</p>
                 <div class="note-meta">
                   <span>书籍：{{ note.bookTitle }}</span>
                   <div class="note-tags">
@@ -46,6 +48,7 @@
                       v-for="tag in note.tags" 
                       :key="tag.id" 
                       class="note-tag"
+                      :class="{ 'tag-highlight': isTagHighlighted(tag.name, note.highlightedTags) }"
                       :style="{ backgroundColor: tag.color || '#e0e0e0' }"
                     >
                       {{ tag.name }}
@@ -79,6 +82,18 @@ const keyword = ref('')
 const books = ref([])
 const notes = ref([])
 const resultsLoading = ref(false)
+
+const highlightText = (text) => {
+  if (!text) return ''
+  return text
+    .replace(/\[\[HIGHLIGHT\]\]/g, '<span class="search-highlight">')
+    .replace(/\[\[\/HIGHLIGHT\]\]/g, '</span>')
+}
+
+const isTagHighlighted = (tagName, highlightedTags) => {
+  if (!highlightedTags || !tagName) return false
+  return highlightedTags.toLowerCase().includes(tagName.toLowerCase())
+}
 
 const getPreview = (content) => {
   if (!content) return ''
@@ -228,6 +243,13 @@ onMounted(() => {
   font-size: 0.9rem;
 }
 
+.book-highlight-desc {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #888;
+  line-height: 1.5;
+}
+
 .notes-results {
   display: flex;
   flex-direction: column;
@@ -304,5 +326,23 @@ onMounted(() => {
 
 .search-hint p {
   color: #999;
+}
+
+.search-highlight {
+  background: #fff3cd;
+  color: #856404;
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 500;
+}
+
+.highlight-content {
+  line-height: 1.6;
+  color: #555;
+  margin-bottom: 0.75rem;
+}
+
+.tag-highlight {
+  box-shadow: 0 0 0 2px #fff3cd, 0 0 0 3px #ffc107;
 }
 </style>
