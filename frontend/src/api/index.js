@@ -52,4 +52,13 @@ export const searchApi = {
   fullTextSearch: (keyword) => client.get('/search', { params: { keyword } })
 }
 
+export const cardApi = {
+  getCards: (params = {}) => client.get('/cards', { params }),
+  getCardsPaged: (params = {}) => client.get('/cards/paged', { params }),
+  getCardBooks: () => client.get('/cards/books'),
+  getCardTags: () => client.get('/cards/tags'),
+  getPageNumbers: (bookId) => client.get(`/cards/pages/${bookId}`),
+  getCardSummary: () => client.get('/cards/summary')
+}
+
 export default client

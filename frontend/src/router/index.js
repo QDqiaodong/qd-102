@@ -7,12 +7,18 @@ import TagManager from '../views/TagManager.vue'
 import SearchPage from '../views/SearchPage.vue'
 import HeatmapView from '../views/HeatmapView.vue'
 import TagGraphView from '../views/TagGraphView.vue'
+import CardWall from '../views/CardWall.vue'
 
 const routes = [
   {
     path: '/',
     name: 'BookList',
     component: BookList
+  },
+  {
+    path: '/cards',
+    name: 'CardWall',
+    component: CardWall
   },
   {
     path: '/book/:id',
