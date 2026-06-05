@@ -62,7 +62,7 @@ public class TagService {
         
         for (Note note : notes) {
             List<Tag> noteTags = note.getTags();
-            if (noteTags == null || noteTags.size() < 2) {
+            if (noteTags == null || noteTags.isEmpty()) {
                 continue;
             }
             
@@ -71,12 +71,14 @@ public class TagService {
                 tagNoteCounts.merge(tag.getId(), 1, Integer::sum);
             }
             
-            for (int i = 0; i < noteTags.size(); i++) {
-                for (int j = i + 1; j < noteTags.size(); j++) {
-                    Tag tag1 = noteTags.get(i);
-                    Tag tag2 = noteTags.get(j);
-                    String pairKey = createPairKey(tag1.getId(), tag2.getId());
-                    tagPairCounts.merge(pairKey, 1, Integer::sum);
+            if (noteTags.size() >= 2) {
+                for (int i = 0; i < noteTags.size(); i++) {
+                    for (int j = i + 1; j < noteTags.size(); j++) {
+                        Tag tag1 = noteTags.get(i);
+                        Tag tag2 = noteTags.get(j);
+                        String pairKey = createPairKey(tag1.getId(), tag2.getId());
+                        tagPairCounts.merge(pairKey, 1, Integer::sum);
+                    }
                 }
             }
         }
