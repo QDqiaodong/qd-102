@@ -90,13 +90,14 @@ public class ActivityService {
         int activeDays = 0;
 
         for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
-            int noteCount = notesByDate.getOrDefault(date, Collections.emptyList()).size();
-            List<Book> dayBooks = updatedBooksByDate.getOrDefault(date, Collections.emptyList());
+            LocalDate currentDate = date;
+            int noteCount = notesByDate.getOrDefault(currentDate, Collections.emptyList()).size();
+            List<Book> dayBooks = updatedBooksByDate.getOrDefault(currentDate, Collections.emptyList());
             int progressCount = (int) dayBooks.stream()
-                    .filter(b -> b.getStatus() != Book.ReadingStatus.READ || !completedDates.contains(date))
+                    .filter(b -> b.getStatus() != Book.ReadingStatus.READ || !completedDates.contains(currentDate))
                     .count();
-            int completedCount = completedDates.contains(date)
-                    ? (int) completedBooks.stream().filter(b -> b.getUpdatedAt().toLocalDate().equals(date)).count()
+            int completedCount = completedDates.contains(currentDate)
+                    ? (int) completedBooks.stream().filter(b -> b.getUpdatedAt().toLocalDate().equals(currentDate)).count()
                     : 0;
 
             int total = noteCount + progressCount + completedCount;
@@ -110,7 +111,7 @@ public class ActivityService {
             if (total > 0) activeDays++;
 
             DayActivity day = new DayActivity();
-            day.setDate(date.toString());
+            day.setDate(currentDate.toString());
             day.setNoteCount(noteCount);
             day.setProgressCount(progressCount);
             day.setCompletedCount(completedCount);
