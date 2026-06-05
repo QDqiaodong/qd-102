@@ -1,14 +1,19 @@
-FROM docker.m.daocloud.io/library/maven:3.9-eclipse-temurin-21 AS builder
+ARG DOCKER_REGISTRY=docker.m.daocloud.io
+
+FROM ${DOCKER_REGISTRY}/library/maven:3.9-eclipse-temurin-21 AS builder
 
 WORKDIR /build
 
-COPY pom.xml .
-RUN mvn dependency:go-offline -q
+ARG MAVEN_MIRROR_URL=https://maven.aliyun.com/repository/public
+
+COPY .mvn/ .mvn/
+COPY pom.xml ./
+RUN mvn -B -ntp -Drepo.public.url=${MAVEN_MIRROR_URL} dependency:go-offline
 
 COPY src ./src
-RUN mvn package -DskipTests -q
+RUN mvn -B -ntp -Drepo.public.url=${MAVEN_MIRROR_URL} -DskipTests package
 
-FROM docker.m.daocloud.io/library/eclipse-temurin:21-jre
+FROM ${DOCKER_REGISTRY}/library/eclipse-temurin:21-jre
 
 WORKDIR /app
 

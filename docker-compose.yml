@@ -1,11 +1,12 @@
 
-version: '3.8'
-
 services:
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        DOCKER_REGISTRY: "${DOCKER_REGISTRY:-docker.m.daocloud.io}"
+        MAVEN_MIRROR_URL: "${MAVEN_MIRROR_URL:-https://maven.aliyun.com/repository/public}"
     container_name: booknote-backend
     ports:
       - "18081:8080"
@@ -27,6 +28,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        DOCKER_REGISTRY: "${DOCKER_REGISTRY:-docker.m.daocloud.io}"
+        NPM_REGISTRY: "${NPM_REGISTRY:-https://registry.npmmirror.com}"
     container_name: booknote-frontend
     ports:
       - "18082:80"

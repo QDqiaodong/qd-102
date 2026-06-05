@@ -1,15 +1,20 @@
 
-FROM docker.m.daocloud.io/library/node:20-alpine AS builder
+ARG DOCKER_REGISTRY=docker.m.daocloud.io
+
+FROM ${DOCKER_REGISTRY}/library/node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+
+COPY package.json package-lock.json .npmrc ./
+RUN npm config set registry "${NPM_REGISTRY}" \
+    && npm ci --no-audit --no-fund
 
 COPY . .
 RUN npm run build
 
-FROM docker.m.daocloud.io/library/nginx:alpine
+FROM ${DOCKER_REGISTRY}/library/nginx:1.27-alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 
