@@ -20,6 +20,7 @@ public class BookDTO {
     private String description;
     private String highlightedTitle;
     private String highlightedContent;
+    private Long noteCount;
     
     public static BookDTO fromEntity(Book book) {
         BookDTO dto = new BookDTO();
@@ -31,6 +32,13 @@ public class BookDTO {
         dto.setStatus(book.getStatus() != null ? book.getStatus().name() : null);
         dto.setProgress(book.getProgress());
         dto.setDescription(book.getDescription());
+        dto.setNoteCount(book.getNotes() != null ? (long) book.getNotes().size() : 0L);
+        return dto;
+    }
+    
+    public static BookDTO fromEntity(Book book, long noteCount) {
+        BookDTO dto = fromEntity(book);
+        dto.setNoteCount(noteCount);
         return dto;
     }
     

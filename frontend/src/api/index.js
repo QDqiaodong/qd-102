@@ -17,7 +17,8 @@ export const bookApi = {
   createBook: (book) => client.post('/books', book),
   updateBook: (id, book) => client.put(`/books/${id}`, book),
   deleteBook: (id) => client.delete(`/books/${id}`),
-  searchBooks: (params) => client.get('/books/search', { params })
+  searchBooks: (params) => client.get('/books/search', { params }),
+  getAllCategories: () => client.get('/books/categories')
 }
 
 export const noteApi = {

@@ -20,22 +20,32 @@ public class BookController {
     private BookService bookService;
     
     @GetMapping
-    public ResponseEntity<List<BookDTO>> getAllBooks(
-            @RequestParam(required = false) String status) {
-        List<Book> books;
+    public ResponseEntity<List<BookDTO>> filterBooks(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) Integer minProgress,
+            @RequestParam(required = false) Integer maxProgress,
+            @RequestParam(required = false) Boolean hasNotes) {
+        Book.ReadingStatus statusEnum = null;
         if (status != null && !status.isEmpty()) {
-            books = bookService.getBooksByStatus(Book.ReadingStatus.valueOf(status));
-        } else {
-            books = bookService.getAllBooks();
+            statusEnum = Book.ReadingStatus.valueOf(status);
         }
-        List<BookDTO> dtos = books.stream().map(BookDTO::fromEntity).collect(Collectors.toList());
+        List<Book> books = bookService.filterBooks(statusEnum, category, minProgress, maxProgress, hasNotes);
+        List<BookDTO> dtos = books.stream()
+                .map(book -> BookDTO.fromEntity(book, bookService.getNoteCountForBook(book.getId())))
+                .collect(Collectors.toList());
         return ResponseEntity.ok(dtos);
+    }
+    
+    @GetMapping("/categories")
+    public ResponseEntity<List<String>> getAllCategories() {
+        return ResponseEntity.ok(bookService.getAllCategories());
     }
     
     @GetMapping("/{id}")
     public ResponseEntity<BookDTO> getBookById(@PathVariable Long id) {
         return bookService.getBookById(id)
-                .map(book -> ResponseEntity.ok(BookDTO.fromEntity(book)))
+                .map(book -> ResponseEntity.ok(BookDTO.fromEntity(book, bookService.getNoteCountForBook(book.getId()))))
                 .orElse(ResponseEntity.notFound().build());
     }
     

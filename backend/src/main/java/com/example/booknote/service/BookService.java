@@ -3,9 +3,12 @@ package com.example.booknote.service;
 
 import com.example.booknote.entity.Book;
 import com.example.booknote.repository.BookRepository;
+import jakarta.persistence.criteria.Predicate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,6 +27,56 @@ public class BookService {
     
     public List<Book> getBooksByStatus(Book.ReadingStatus status) {
         return bookRepository.findByStatus(status);
+    }
+    
+    public List<Book> filterBooks(Book.ReadingStatus status, String category, 
+                                   Integer minProgress, Integer maxProgress, 
+                                   Boolean hasNotes) {
+        Specification<Book> spec = (root, query, criteriaBuilder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            
+            if (status != null) {
+                predicates.add(criteriaBuilder.equal(root.get("status"), status));
+            }
+            
+            if (category != null && !category.isEmpty()) {
+                predicates.add(criteriaBuilder.equal(root.get("category"), category));
+            }
+            
+            if (minProgress != null) {
+                predicates.add(criteriaBuilder.greaterThanOrEqualTo(root.get("progress"), minProgress));
+            }
+            
+            if (maxProgress != null) {
+                predicates.add(criteriaBuilder.lessThanOrEqualTo(root.get("progress"), maxProgress));
+            }
+            
+            if (hasNotes != null) {
+                if (hasNotes) {
+                    predicates.add(criteriaBuilder.isNotEmpty(root.get("notes")));
+                } else {
+                    predicates.add(criteriaBuilder.isEmpty(root.get("notes")));
+                }
+            }
+            
+            query.distinct(true);
+            return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
+        };
+        
+        return bookRepository.findAll(spec);
+    }
+    
+    public List<String> getAllCategories() {
+        return bookRepository.findAll().stream()
+                .map(Book::getCategory)
+                .filter(cat -> cat != null && !cat.isEmpty())
+                .distinct()
+                .sorted()
+                .toList();
+    }
+    
+    public long getNoteCountForBook(Long bookId) {
+        return bookRepository.countNotesByBookId(bookId);
     }
     
     public Optional<Book> getBookById(Long id) {
