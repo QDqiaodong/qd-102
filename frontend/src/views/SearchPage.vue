@@ -50,9 +50,8 @@
                       class="note-tag"
                       :class="{ 'tag-highlight': isTagHighlighted(tag.name, note.highlightedTags) }"
                       :style="{ backgroundColor: tag.color || '#e0e0e0' }"
-                    >
-                      {{ tag.name }}
-                    </span>
+                      v-html="highlightTagName(tag.name, note.highlightedTags)"
+                    ></span>
                   </div>
                 </div>
               </div>
@@ -93,6 +92,22 @@ const highlightText = (text) => {
 const isTagHighlighted = (tagName, highlightedTags) => {
   if (!highlightedTags || !tagName) return false
   return highlightedTags.toLowerCase().includes(tagName.toLowerCase())
+}
+
+const highlightTagName = (tagName, highlightedTags) => {
+  if (!highlightedTags || !tagName) return tagName
+  
+  const cleanHighlightedTags = highlightedTags
+    .replace(/\[\[HIGHLIGHT\]\]/g, '')
+    .replace(/\[\[\/HIGHLIGHT\]\]/g, '')
+    .toLowerCase()
+  
+  if (cleanHighlightedTags.includes(tagName.toLowerCase())) {
+    const regex = new RegExp(`(${tagName})`, 'gi')
+    return tagName.replace(regex, '<span class="tag-name-highlight">$1</span>')
+  }
+  
+  return tagName
 }
 
 const getPreview = (content) => {
@@ -344,5 +359,13 @@ onMounted(() => {
 
 .tag-highlight {
   box-shadow: 0 0 0 2px #fff3cd, 0 0 0 3px #ffc107;
+}
+
+.tag-name-highlight {
+  background: rgba(255,255,255,0.3);
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 600;
+  text-decoration: underline;
 }
 </style>

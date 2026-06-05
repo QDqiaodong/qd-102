@@ -312,6 +312,23 @@ const loadTags = async () => {
   }
 }
 
+const extractTocFromHtml = (html) => {
+  const items = []
+  const tempDiv = document.createElement('div')
+  tempDiv.innerHTML = html
+  
+  const headers = tempDiv.querySelectorAll('h1, h2, h3, h4, h5, h6')
+  headers.forEach(header => {
+    const level = parseInt(header.tagName.substring(1))
+    items.push({
+      level: level,
+      text: header.textContent.trim()
+    })
+  })
+  
+  tocItems.value = items
+}
+
 const loadNote = async () => {
   const path = window.location.pathname
   if (path.includes('/note/')) {
@@ -328,8 +345,8 @@ const loadNote = async () => {
       }
       bookId.value = note.bookId
       if (quillInstance) {
-        quillInstance.root.innerHTML = formData.value.content
-        extractToc()
+        quillInstance.clipboard.dangerouslyPasteHTML(formData.value.content)
+        extractTocFromHtml(formData.value.content)
       }
     } catch (error) {
       console.error('加载笔记失败:', error)
@@ -355,8 +372,8 @@ const loadDraft = async () => {
       }
       draftId.value = draft.draftId
       if (quillInstance) {
-        quillInstance.root.innerHTML = formData.value.content
-        extractToc()
+        quillInstance.clipboard.dangerouslyPasteHTML(formData.value.content)
+        extractTocFromHtml(formData.value.content)
       }
     }
   } catch (error) {
