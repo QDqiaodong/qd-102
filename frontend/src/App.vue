@@ -19,6 +19,7 @@
             <a href="/" class="nav-link">书籍库</a>
             <a href="/heatmap" class="nav-link">阅读活跃度</a>
             <a href="/tags" class="nav-link">标签管理</a>
+            <a href="/tags/graph" class="nav-link">知识图谱</a>
           </nav>
         </div>
       </div>

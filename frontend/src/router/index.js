@@ -6,6 +6,7 @@ import NoteEditor from '../views/NoteEditor.vue'
 import TagManager from '../views/TagManager.vue'
 import SearchPage from '../views/SearchPage.vue'
 import HeatmapView from '../views/HeatmapView.vue'
+import TagGraphView from '../views/TagGraphView.vue'
 
 const routes = [
   {
@@ -32,6 +33,11 @@ const routes = [
     path: '/tags',
     name: 'TagManager',
     component: TagManager
+  },
+  {
+    path: '/tags/graph',
+    name: 'TagGraph',
+    component: TagGraphView
   },
   {
     path: '/search',

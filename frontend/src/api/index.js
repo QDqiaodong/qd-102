@@ -38,7 +38,9 @@ export const tagApi = {
   getTagById: (id) => client.get(`/tags/${id}`),
   createTag: (tag) => client.post('/tags', tag),
   updateTag: (id, tag) => client.put(`/tags/${id}`, tag),
-  deleteTag: (id) => client.delete(`/tags/${id}`)
+  deleteTag: (id) => client.delete(`/tags/${id}`),
+  getTagGraph: () => client.get('/tags/graph'),
+  getTagNeighbors: (id) => client.get(`/tags/${id}/neighbors`)
 }
 
 export const activityApi = {

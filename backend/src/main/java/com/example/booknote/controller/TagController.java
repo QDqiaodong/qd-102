@@ -2,6 +2,7 @@
 package com.example.booknote.controller;
 
 import com.example.booknote.dto.TagDTO;
+import com.example.booknote.dto.TagGraphDTO;
 import com.example.booknote.entity.Tag;
 import com.example.booknote.service.TagService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +32,18 @@ public class TagController {
         return tagService.getTagById(id)
                 .map(tag -> ResponseEntity.ok(TagDTO.fromEntity(tag)))
                 .orElse(ResponseEntity.notFound().build());
+    }
+    
+    @GetMapping("/graph")
+    public ResponseEntity<TagGraphDTO> getTagGraph() {
+        TagGraphDTO graph = tagService.getTagGraph();
+        return ResponseEntity.ok(graph);
+    }
+    
+    @GetMapping("/{id}/neighbors")
+    public ResponseEntity<TagGraphDTO> getTagNeighbors(@PathVariable Long id) {
+        TagGraphDTO graph = tagService.getTagNeighbors(id);
+        return ResponseEntity.ok(graph);
     }
     
     @PostMapping
