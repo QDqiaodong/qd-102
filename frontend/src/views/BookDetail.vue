@@ -85,32 +85,87 @@
       <div v-else class="notes-section">
         <div class="section-header">
           <h2>读书笔记</h2>
-          <button @click="goToNewNote" class="add-note-btn">+ 写笔记</button>
+          <div class="section-header-right">
+            <div class="view-toggle">
+              <button 
+                :class="['view-toggle-btn', { active: noteViewMode === 'card' }]" 
+                @click="noteViewMode = 'card'"
+                title="卡片视图"
+              >
+                <span class="view-icon">▦</span>
+                <span class="view-label">卡片</span>
+              </button>
+              <button 
+                :class="['view-toggle-btn', { active: noteViewMode === 'timeline' }]" 
+                @click="noteViewMode = 'timeline'"
+                title="时间线视图"
+              >
+                <span class="view-icon">☰</span>
+                <span class="view-label">时间线</span>
+              </button>
+            </div>
+            <button @click="goToNewNote" class="add-note-btn">+ 写笔记</button>
+          </div>
         </div>
 
         <div v-if="notes.length > 0" class="notes-summary">
           已加载 {{ notes.length }} / {{ totalNotes }} 条
         </div>
 
-        <div v-if="notes.length > 0" class="notes-list">
-          <div v-for="note in notes" :key="note.id" class="note-item" @click="openNoteViewer(note)">
-            <h3 class="note-title">{{ note.title }}</h3>
-            <p v-if="note.pageNumber" class="note-page">第 {{ note.pageNumber }} 页</p>
-            <p class="note-preview">{{ getPreview(note.content) }}</p>
-            <div class="note-tags">
-              <span v-for="tag in note.tags" :key="tag.id" class="note-tag" :style="{ backgroundColor: tag.color || '#e0e0e0' }">
-                {{ tag.name }}
-              </span>
-            </div>
-            <div class="note-meta">
-              <span class="note-date">{{ formatDate(note.createdAt) }}</span>
-              <div class="note-actions">
-                <button @click.stop="goToEditNote(note.id)" class="edit-note-btn">编辑</button>
-                <button @click.stop="deleteNote(note.id)" class="delete-note-btn">删除</button>
+        <transition name="fade" mode="out-in">
+          <div v-if="notes.length > 0 && noteViewMode === 'card'" key="card" class="notes-card-grid">
+            <div v-for="note in notes" :key="note.id" class="note-card" @click="openNoteViewer(note)">
+              <div class="note-card-header">
+                <h3 class="note-card-title">{{ note.title }}</h3>
+                <span v-if="note.pageNumber" class="note-card-page">P.{{ note.pageNumber }}</span>
+              </div>
+              <p class="note-card-preview">{{ getPreview(note.content) }}</p>
+              <div class="note-card-tags">
+                <span v-for="tag in note.tags" :key="tag.id" class="note-tag" :style="{ backgroundColor: tag.color || '#e0e0e0' }">
+                  {{ tag.name }}
+                </span>
+              </div>
+              <div class="note-card-footer">
+                <span class="note-card-date">{{ formatDate(note.createdAt) }}</span>
+                <div class="note-card-actions">
+                  <button @click.stop="goToEditNote(note.id)" class="edit-note-btn">编辑</button>
+                  <button @click.stop="deleteNote(note.id)" class="delete-note-btn">删除</button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+
+          <div v-if="notes.length > 0 && noteViewMode === 'timeline'" key="timeline" class="notes-timeline">
+            <div v-for="(group, dateKey) in timelineGroups" :key="dateKey" class="timeline-group">
+              <div class="timeline-date-label">
+                <span class="timeline-dot"></span>
+                <span class="timeline-date-text">{{ dateKey }}</span>
+                <span class="timeline-count">{{ group.length }} 条笔记</span>
+              </div>
+              <div class="timeline-items">
+                <div v-for="note in group" :key="note.id" class="timeline-item" @click="openNoteViewer(note)">
+                  <div class="timeline-item-marker"></div>
+                  <div class="timeline-item-content">
+                    <div class="timeline-item-header">
+                      <h3 class="timeline-item-title">{{ note.title }}</h3>
+                      <span v-if="note.pageNumber" class="timeline-item-page">第 {{ note.pageNumber }} 页</span>
+                    </div>
+                    <p class="timeline-item-preview">{{ getPreview(note.content) }}</p>
+                    <div class="timeline-item-tags">
+                      <span v-for="tag in note.tags" :key="tag.id" class="note-tag" :style="{ backgroundColor: tag.color || '#e0e0e0' }">
+                        {{ tag.name }}
+                      </span>
+                    </div>
+                    <div class="timeline-item-actions">
+                      <button @click.stop="goToEditNote(note.id)" class="edit-note-btn">编辑</button>
+                      <button @click.stop="deleteNote(note.id)" class="delete-note-btn">删除</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </transition>
 
         <div v-if="hasMoreNotes" class="load-more-wrap">
           <button @click="loadMoreNotes" :disabled="notesLoading" class="load-more-btn">
@@ -142,6 +197,7 @@ const totalPages = ref(0)
 const totalNotes = ref(0)
 const notesLoading = ref(false)
 const pageSize = 5
+const noteViewMode = ref('card')
 
 const viewingNote = ref(null)
 const noteContentRef = ref(null)
@@ -351,6 +407,18 @@ const formatDate = (dateStr) => {
 }
 
 const hasMoreNotes = computed(() => currentPage.value + 1 < totalPages.value)
+
+const timelineGroups = computed(() => {
+  const groups = {}
+  notes.value.forEach(note => {
+    const dateKey = formatDate(note.createdAt)
+    if (!groups[dateKey]) {
+      groups[dateKey] = []
+    }
+    groups[dateKey].push(note)
+  })
+  return groups
+})
 
 const loadNotes = async (reset = false) => {
   const id = window.location.pathname.split('/')[2]
@@ -800,6 +868,51 @@ onBeforeUnmount(() => {
   margin-bottom: 1.5rem;
 }
 
+.section-header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.view-toggle {
+  display: flex;
+  background: #f0f0f0;
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.view-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.9rem;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #666;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.view-toggle-btn:hover {
+  color: #333;
+}
+
+.view-toggle-btn.active {
+  background: white;
+  color: #667eea;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.view-icon {
+  font-size: 1rem;
+}
+
+.view-label {
+  font-weight: 500;
+}
+
 .section-header h2 {
   font-size: 1.4rem;
   color: #333;
@@ -821,23 +934,247 @@ onBeforeUnmount(() => {
   font-weight: 500;
 }
 
-.notes-list {
+.notes-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+.note-card {
+  background: #fafafa;
+  border-radius: 12px;
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  border: 1px solid transparent;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
 }
 
-.note-item {
-  padding: 1.5rem;
-  background: #fafafa;
-  border-radius: 8px;
-  border-left: 4px solid #667eea;
-  cursor: pointer;
-  transition: background 0.2s;
+.note-card:hover {
+  background: white;
+  border-color: #e0e0e0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  transform: translateY(-2px);
 }
 
-.note-item:hover {
+.note-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.note-card-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-card-page {
+  font-size: 0.8rem;
+  color: #999;
   background: #f0f0f0;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.note-card-preview {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #666;
+  margin-bottom: 0.75rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: 1;
+}
+
+.note-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.note-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 0.75rem;
+  border-top: 1px solid #eee;
+}
+
+.note-card-date {
+  font-size: 0.8rem;
+  color: #999;
+}
+
+.note-card-actions button {
+  padding: 0.3rem 0.6rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.notes-timeline {
+  position: relative;
+}
+
+.timeline-group {
+  margin-bottom: 2rem;
+}
+
+.timeline-group:last-child {
+  margin-bottom: 0;
+}
+
+.timeline-date-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  position: relative;
+}
+
+.timeline-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 0 0 0 4px #eef2ff;
+  flex-shrink: 0;
+}
+
+.timeline-date-text {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.timeline-count {
+  font-size: 0.85rem;
+  color: #999;
+  background: #f5f5f5;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+}
+
+.timeline-items {
+  position: relative;
+  padding-left: 2rem;
+  margin-left: 5px;
+  border-left: 2px solid #e8e8e8;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.timeline-item {
+  position: relative;
+  display: flex;
+  gap: 1rem;
+}
+
+.timeline-item-marker {
+  position: absolute;
+  left: -2rem;
+  top: 1.25rem;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid #667eea;
+  transform: translateX(-4px);
+}
+
+.timeline-item-content {
+  flex: 1;
+  background: #fafafa;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.timeline-item-content:hover {
+  background: white;
+  border-color: #e0e0e0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.timeline-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.timeline-item-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.timeline-item-page {
+  font-size: 0.85rem;
+  color: #999;
+  flex-shrink: 0;
+}
+
+.timeline-item-preview {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #666;
+  margin-bottom: 0.75rem;
+}
+
+.timeline-item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.timeline-item-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.timeline-item-actions button {
+  padding: 0.35rem 0.75rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 
 .load-more-wrap {
@@ -861,51 +1198,11 @@ onBeforeUnmount(() => {
   opacity: 0.6;
 }
 
-.note-title {
-  font-size: 1.2rem;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-}
-
-.note-page {
-  color: #999;
-  font-size: 0.9rem;
-  margin-bottom: 0.5rem;
-}
-
-.note-preview {
-  line-height: 1.5;
-  color: #555;
-  margin-bottom: 1rem;
-}
-
-.note-tags {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
 .note-tag {
   padding: 0.25rem 0.75rem;
   border-radius: 12px;
   font-size: 0.85rem;
   color: white;
-}
-
-.note-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  color: #999;
-  font-size: 0.9rem;
-}
-
-.note-actions button {
-  padding: 0.35rem 0.75rem;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.85rem;
 }
 
 .edit-note-btn {
