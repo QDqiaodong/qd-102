@@ -76,10 +76,13 @@ public class StatisticsService {
     }
 
     public List<MonthlyNoteOutputDTO> getMonthlyNoteOutput(int months) {
-        LocalDateTime endDate = LocalDateTime.now();
-        LocalDateTime startDate = endDate.minusMonths(months);
+        YearMonth endMonth = YearMonth.now();
+        YearMonth startMonth = endMonth.minusMonths(months - 1);
 
-        List<Note> notes = noteRepository.findByCreatedAtBetween(startDate, endDate);
+        LocalDateTime startDateTime = startMonth.atDay(1).atStartOfDay();
+        LocalDateTime endDateTime = endMonth.atEndOfMonth().atTime(23, 59, 59, 999999999);
+
+        List<Note> notes = noteRepository.findByCreatedAtBetween(startDateTime, endDateTime);
 
         Map<YearMonth, Long> monthlyCount = notes.stream()
                 .collect(Collectors.groupingBy(
@@ -88,11 +91,10 @@ public class StatisticsService {
                 ));
 
         List<MonthlyNoteOutputDTO> result = new ArrayList<>();
-        YearMonth current = YearMonth.from(startDate);
-        YearMonth end = YearMonth.from(endDate);
+        YearMonth current = startMonth;
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM");
 
-        while (!current.isAfter(end)) {
+        while (!current.isAfter(endMonth)) {
             long count = monthlyCount.getOrDefault(current, 0L);
             result.add(new MonthlyNoteOutputDTO(current.format(formatter), count));
             current = current.plusMonths(1);
