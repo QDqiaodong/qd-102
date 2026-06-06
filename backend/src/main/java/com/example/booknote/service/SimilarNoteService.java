@@ -22,16 +22,35 @@ public class SimilarNoteService {
     private static final double DEFAULT_THRESHOLD = 0.6;
     private static final int N_GRAM_SIZE = 2;
 
-    public List<SimilarNotePairDTO> findSimilarNotes(Long bookId, Double threshold) {
+    public List<SimilarNotePairDTO> findSimilarNotes(Long bookId, Double threshold, Boolean crossBook) {
         double actualThreshold = threshold != null ? threshold : DEFAULT_THRESHOLD;
-        List<Note> notes;
+        boolean isCrossBook = Boolean.TRUE.equals(crossBook);
 
         if (bookId != null) {
-            notes = noteRepository.findByBookId(bookId);
-        } else {
-            notes = noteRepository.findAll();
+            List<Note> notes = noteRepository.findByBookId(bookId);
+            return findSimilarPairsFromList(notes, actualThreshold);
         }
 
+        List<Note> allNotes = noteRepository.findAll();
+
+        if (isCrossBook) {
+            return findSimilarPairsFromList(allNotes, actualThreshold);
+        }
+
+        Map<Long, List<Note>> notesByBook = allNotes.stream()
+                .filter(note -> note.getBook() != null)
+                .collect(Collectors.groupingBy(note -> note.getBook().getId()));
+
+        List<SimilarNotePairDTO> allSimilarPairs = new ArrayList<>();
+        for (List<Note> bookNotes : notesByBook.values()) {
+            allSimilarPairs.addAll(findSimilarPairsFromList(bookNotes, actualThreshold));
+        }
+
+        allSimilarPairs.sort((p1, p2) -> Double.compare(p2.getSimilarityScore(), p1.getSimilarityScore()));
+        return allSimilarPairs;
+    }
+
+    private List<SimilarNotePairDTO> findSimilarPairsFromList(List<Note> notes, double threshold) {
         if (notes == null || notes.size() < 2) {
             return Collections.emptyList();
         }
@@ -53,7 +72,7 @@ public class SimilarNoteService {
                 double contentSimilarity = calculateContentSimilarity(note1.getContent(), note2.getContent());
                 double totalSimilarity = TITLE_WEIGHT * titleSimilarity + CONTENT_WEIGHT * contentSimilarity;
 
-                if (totalSimilarity >= actualThreshold) {
+                if (totalSimilarity >= threshold) {
                     SimilarNotePairDTO pairDTO = new SimilarNotePairDTO();
                     pairDTO.setNote1(NoteDTO.fromEntity(note1));
                     pairDTO.setNote2(NoteDTO.fromEntity(note2));
@@ -68,19 +87,25 @@ public class SimilarNoteService {
         }
 
         similarPairs.sort((p1, p2) -> Double.compare(p2.getSimilarityScore(), p1.getSimilarityScore()));
-
         return similarPairs;
     }
 
-    public List<SimilarNotePairDTO> findSimilarNotesForNote(Long noteId, Double threshold) {
+    public List<SimilarNotePairDTO> findSimilarNotesForNote(Long noteId, Double threshold, Boolean crossBook) {
         double actualThreshold = threshold != null ? threshold : DEFAULT_THRESHOLD;
+        boolean isCrossBook = Boolean.TRUE.equals(crossBook);
         Note targetNote = noteRepository.findById(noteId)
                 .orElseThrow(() -> new RuntimeException("Note not found"));
 
-        List<Note> allNotes = noteRepository.findAll();
+        List<Note> candidateNotes;
+        if (isCrossBook || targetNote.getBook() == null) {
+            candidateNotes = noteRepository.findAll();
+        } else {
+            candidateNotes = noteRepository.findByBookId(targetNote.getBook().getId());
+        }
+
         List<SimilarNotePairDTO> similarPairs = new ArrayList<>();
 
-        for (Note note : allNotes) {
+        for (Note note : candidateNotes) {
             if (note.getId().equals(noteId)) {
                 continue;
             }
@@ -106,11 +131,18 @@ public class SimilarNoteService {
         return similarPairs;
     }
 
-    public Map<String, Object> getSimilarityStatistics(Long bookId) {
-        List<SimilarNotePairDTO> similarPairs = findSimilarNotes(bookId, DEFAULT_THRESHOLD);
+    public Map<String, Object> getSimilarityStatistics(Long bookId, Boolean crossBook) {
+        List<SimilarNotePairDTO> similarPairs = findSimilarNotes(bookId, DEFAULT_THRESHOLD, crossBook);
         Map<String, Object> stats = new HashMap<>();
 
-        long totalNotes = bookId != null ? noteRepository.countByBookId(bookId) : noteRepository.count();
+        long totalNotes;
+        if (bookId != null) {
+            totalNotes = noteRepository.countByBookId(bookId);
+        } else if (Boolean.TRUE.equals(crossBook)) {
+            totalNotes = noteRepository.count();
+        } else {
+            totalNotes = noteRepository.count();
+        }
         Set<Long> similarNoteIds = new HashSet<>();
 
         for (SimilarNotePairDTO pair : similarPairs) {

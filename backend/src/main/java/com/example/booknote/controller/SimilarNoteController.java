@@ -20,23 +20,26 @@ public class SimilarNoteController {
     @GetMapping
     public ResponseEntity<List<SimilarNotePairDTO>> findSimilarNotes(
             @RequestParam(required = false) Long bookId,
-            @RequestParam(required = false, defaultValue = "0.6") Double threshold) {
-        List<SimilarNotePairDTO> similarNotes = similarNoteService.findSimilarNotes(bookId, threshold);
+            @RequestParam(required = false, defaultValue = "0.6") Double threshold,
+            @RequestParam(required = false, defaultValue = "false") Boolean crossBook) {
+        List<SimilarNotePairDTO> similarNotes = similarNoteService.findSimilarNotes(bookId, threshold, crossBook);
         return ResponseEntity.ok(similarNotes);
     }
 
     @GetMapping("/note/{noteId}")
     public ResponseEntity<List<SimilarNotePairDTO>> findSimilarNotesForNote(
             @PathVariable Long noteId,
-            @RequestParam(required = false, defaultValue = "0.6") Double threshold) {
-        List<SimilarNotePairDTO> similarNotes = similarNoteService.findSimilarNotesForNote(noteId, threshold);
+            @RequestParam(required = false, defaultValue = "0.6") Double threshold,
+            @RequestParam(required = false, defaultValue = "false") Boolean crossBook) {
+        List<SimilarNotePairDTO> similarNotes = similarNoteService.findSimilarNotesForNote(noteId, threshold, crossBook);
         return ResponseEntity.ok(similarNotes);
     }
 
     @GetMapping("/statistics")
     public ResponseEntity<Map<String, Object>> getSimilarityStatistics(
-            @RequestParam(required = false) Long bookId) {
-        Map<String, Object> statistics = similarNoteService.getSimilarityStatistics(bookId);
+            @RequestParam(required = false) Long bookId,
+            @RequestParam(required = false, defaultValue = "false") Boolean crossBook) {
+        Map<String, Object> statistics = similarNoteService.getSimilarityStatistics(bookId, crossBook);
         return ResponseEntity.ok(statistics);
     }
 }

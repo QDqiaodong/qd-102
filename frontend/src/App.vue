@@ -18,6 +18,7 @@
           <nav class="nav-links">
             <a href="/" class="nav-link">书籍库</a>
             <a href="/cards" class="nav-link">书摘墙</a>
+            <a href="/similar-notes" class="nav-link">相似笔记</a>
             <a href="/heatmap" class="nav-link">阅读活跃度</a>
             <a href="/tags" class="nav-link">标签管理</a>
             <a href="/tags/graph" class="nav-link">知识图谱</a>

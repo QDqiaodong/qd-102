@@ -8,6 +8,7 @@ import SearchPage from '../views/SearchPage.vue'
 import HeatmapView from '../views/HeatmapView.vue'
 import TagGraphView from '../views/TagGraphView.vue'
 import CardWall from '../views/CardWall.vue'
+import SimilarNotes from '../views/SimilarNotes.vue'
 
 const routes = [
   {
@@ -54,6 +55,11 @@ const routes = [
     path: '/heatmap',
     name: 'HeatmapView',
     component: HeatmapView
+  },
+  {
+    path: '/similar-notes',
+    name: 'SimilarNotes',
+    component: SimilarNotes
   }
 ]
 

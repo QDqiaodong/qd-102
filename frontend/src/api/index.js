@@ -62,4 +62,10 @@ export const cardApi = {
   getCardSummary: () => client.get('/cards/summary')
 }
 
+export const similarNoteApi = {
+  findSimilarNotes: (params = {}) => client.get('/similar-notes', { params }),
+  findSimilarNotesForNote: (noteId, params = {}) => client.get(`/similar-notes/note/${noteId}`, { params }),
+  getSimilarityStatistics: (params = {}) => client.get('/similar-notes/statistics', { params })
+}
+
 export default client
