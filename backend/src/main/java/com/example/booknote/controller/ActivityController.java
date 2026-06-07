@@ -25,4 +25,10 @@ public class ActivityController {
         LocalDate localDate = LocalDate.parse(date);
         return ResponseEntity.ok(activityService.getDateDetail(localDate));
     }
+
+    @GetMapping("/wake-up-list")
+    public ResponseEntity<ActivityService.WakeUpListData> getWakeUpList(
+            @RequestParam(defaultValue = "30") int daysThreshold) {
+        return ResponseEntity.ok(activityService.getWakeUpList(daysThreshold));
+    }
 }

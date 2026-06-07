@@ -16,6 +16,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -173,5 +174,82 @@ public class ActivityService {
         if (ratio <= 0.50) return 2;
         if (ratio <= 0.75) return 3;
         return 4;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class WakeUpBookItem {
+        private BookDTO book;
+        private long daysInactive;
+        private String reason;
+        private String category;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class WakeUpListData {
+        private List<WakeUpBookItem> stagnantReading;
+        private List<WakeUpBookItem> neglectedWantToRead;
+        private List<WakeUpBookItem> readWithoutSummary;
+        private int totalCount;
+    }
+
+    public WakeUpListData getWakeUpList(int daysThreshold) {
+        LocalDateTime thresholdDate = LocalDateTime.now().minusDays(daysThreshold);
+        LocalDateTime now = LocalDateTime.now();
+
+        List<Book> stagnantReadingBooks = bookRepository.findReadingBooksWithNoNotesSince(thresholdDate);
+        List<Book> neglectedWantToReadBooks = bookRepository.findWantToReadBooksOlderThan(thresholdDate);
+        List<Book> readWithoutSummaryBooks = bookRepository.findReadBooksWithNoNotes();
+
+        List<WakeUpBookItem> stagnantReading = stagnantReadingBooks.stream()
+                .map(book -> {
+                    WakeUpBookItem item = new WakeUpBookItem();
+                    item.setBook(BookDTO.fromEntity(book, bookRepository.countNotesByBookId(book.getId())));
+                    LocalDateTime latestNoteDate = bookRepository.findLatestNoteDateByBookId(book.getId());
+                    long days = latestNoteDate != null
+                            ? ChronoUnit.DAYS.between(latestNoteDate.toLocalDate(), now.toLocalDate())
+                            : ChronoUnit.DAYS.between(book.getCreatedAt().toLocalDate(), now.toLocalDate());
+                    item.setDaysInactive(days);
+                    item.setReason(latestNoteDate != null
+                            ? "已连续 " + days + " 天无新增笔记"
+                            : "开读 " + days + " 天仍无笔记");
+                    item.setCategory("stagnantReading");
+                    return item;
+                })
+                .sorted(Comparator.comparingLong(WakeUpBookItem::getDaysInactive).reversed())
+                .collect(Collectors.toList());
+
+        List<WakeUpBookItem> neglectedWantToRead = neglectedWantToReadBooks.stream()
+                .map(book -> {
+                    WakeUpBookItem item = new WakeUpBookItem();
+                    item.setBook(BookDTO.fromEntity(book, 0L));
+                    long days = ChronoUnit.DAYS.between(book.getCreatedAt().toLocalDate(), now.toLocalDate());
+                    item.setDaysInactive(days);
+                    item.setReason("加入想读 " + days + " 天仍未开始");
+                    item.setCategory("neglectedWantToRead");
+                    return item;
+                })
+                .sorted(Comparator.comparingLong(WakeUpBookItem::getDaysInactive).reversed())
+                .collect(Collectors.toList());
+
+        List<WakeUpBookItem> readWithoutSummary = readWithoutSummaryBooks.stream()
+                .map(book -> {
+                    WakeUpBookItem item = new WakeUpBookItem();
+                    item.setBook(BookDTO.fromEntity(book, 0L));
+                    long days = ChronoUnit.DAYS.between(book.getUpdatedAt().toLocalDate(), now.toLocalDate());
+                    item.setDaysInactive(days);
+                    item.setReason("已读完 " + days + " 天但无总结笔记");
+                    item.setCategory("readWithoutSummary");
+                    return item;
+                })
+                .sorted(Comparator.comparingLong(WakeUpBookItem::getDaysInactive).reversed())
+                .collect(Collectors.toList());
+
+        int totalCount = stagnantReading.size() + neglectedWantToRead.size() + readWithoutSummary.size();
+
+        return new WakeUpListData(stagnantReading, neglectedWantToRead, readWithoutSummary, totalCount);
     }
 }

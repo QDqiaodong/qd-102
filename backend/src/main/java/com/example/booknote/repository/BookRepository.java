@@ -28,4 +28,19 @@ public interface BookRepository extends JpaRepository<Book, Long>, JpaSpecificat
 
     @Query("SELECT COUNT(n) FROM Note n WHERE n.book.id = :bookId")
     long countNotesByBookId(@Param("bookId") Long bookId);
+
+    @Query("SELECT b FROM Book b WHERE b.status = 'READING' AND b.id NOT IN " +
+           "(SELECT n.book.id FROM Note n WHERE n.createdAt >= :date)")
+    List<Book> findReadingBooksWithNoNotesSince(@Param("date") LocalDateTime date);
+
+    @Query("SELECT b FROM Book b WHERE b.status = 'WANT_TO_READ' " +
+           "AND b.createdAt < :date AND (b.progress IS NULL OR b.progress = 0)")
+    List<Book> findWantToReadBooksOlderThan(@Param("date") LocalDateTime date);
+
+    @Query("SELECT b FROM Book b WHERE b.status = 'READ' " +
+           "AND b.id NOT IN (SELECT n.book.id FROM Note n)")
+    List<Book> findReadBooksWithNoNotes();
+
+    @Query("SELECT MAX(n.createdAt) FROM Note n WHERE n.book.id = :bookId")
+    LocalDateTime findLatestNoteDateByBookId(@Param("bookId") Long bookId);
 }
