@@ -42,4 +42,11 @@ public class StatisticsController {
     public ResponseEntity<List<ProgressRangeDTO>> getProgressRange() {
         return ResponseEntity.ok(statisticsService.getProgressRange());
     }
+
+    @GetMapping("/concept-dictionary")
+    public ResponseEntity<List<ConceptTermDTO>> getConceptDictionary(
+            @RequestParam(defaultValue = "50") int limit,
+            @RequestParam(defaultValue = "2") int minFrequency) {
+        return ResponseEntity.ok(statisticsService.getConceptDictionary(limit, minFrequency));
+    }
 }
