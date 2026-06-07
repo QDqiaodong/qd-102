@@ -129,7 +129,7 @@ public class SearchService {
     }
     
     public List<SearchResult> search(String keyword) throws IOException {
-        return advancedSearch(keyword, null, null, null, null, null, null);
+        return searchFromLucene(keyword);
     }
 
     public AdvancedSearchResult advancedSearch(String keyword, String status, String category, 
