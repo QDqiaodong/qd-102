@@ -10,7 +10,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ConceptTermDTO {
     private String term;
+    private String type;
     private long frequency;
     private long bookCount;
     private long noteCount;
+    private double score;
 }
