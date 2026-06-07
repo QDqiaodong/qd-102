@@ -194,6 +194,43 @@ public class TagService {
         return graphDTO;
     }
     
+    public Tag mergeTags(Long targetTagId, List<Long> sourceTagIds) {
+        Tag targetTag = tagRepository.findById(targetTagId)
+                .orElseThrow(() -> new RuntimeException("目标标签不存在"));
+        
+        if (sourceTagIds == null || sourceTagIds.isEmpty()) {
+            throw new RuntimeException("请选择要合并的源标签");
+        }
+        
+        if (sourceTagIds.contains(targetTagId)) {
+            throw new RuntimeException("目标标签不能同时作为源标签");
+        }
+        
+        Set<Long> sourceIdSet = new HashSet<>(sourceTagIds);
+        List<Tag> sourceTags = tagRepository.findAllById(sourceIdSet);
+        
+        if (sourceTags.size() != sourceIdSet.size()) {
+            throw new RuntimeException("部分源标签不存在");
+        }
+        
+        for (Tag sourceTag : sourceTags) {
+            List<Note> notes = sourceTag.getNotes();
+            if (notes != null && !notes.isEmpty()) {
+                for (Note note : notes) {
+                    boolean alreadyHasTarget = note.getTags().stream()
+                            .anyMatch(t -> t.getId().equals(targetTagId));
+                    if (!alreadyHasTarget) {
+                        note.getTags().add(targetTag);
+                        noteRepository.save(note);
+                    }
+                }
+            }
+            tagRepository.delete(sourceTag);
+        }
+        
+        return tagRepository.findById(targetTagId).orElse(targetTag);
+    }
+    
     private String createPairKey(Long id1, Long id2) {
         if (id1 < id2) {
             return id1 + "_" + id2;

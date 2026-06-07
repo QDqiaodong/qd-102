@@ -41,7 +41,8 @@ export const tagApi = {
   updateTag: (id, tag) => client.put(`/tags/${id}`, tag),
   deleteTag: (id) => client.delete(`/tags/${id}`),
   getTagGraph: () => client.get('/tags/graph'),
-  getTagNeighbors: (id) => client.get(`/tags/${id}/neighbors`)
+  getTagNeighbors: (id) => client.get(`/tags/${id}/neighbors`),
+  mergeTags: (targetTagId, sourceTagIds) => client.post('/tags/merge', { targetTagId, sourceTagIds })
 }
 
 export const activityApi = {

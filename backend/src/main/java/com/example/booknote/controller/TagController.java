@@ -3,6 +3,7 @@ package com.example.booknote.controller;
 
 import com.example.booknote.dto.TagDTO;
 import com.example.booknote.dto.TagGraphDTO;
+import com.example.booknote.dto.TagMergeRequestDTO;
 import com.example.booknote.entity.Tag;
 import com.example.booknote.service.TagService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,5 +65,11 @@ public class TagController {
     public ResponseEntity<Void> deleteTag(@PathVariable Long id) {
         tagService.deleteTag(id);
         return ResponseEntity.noContent().build();
+    }
+    
+    @PostMapping("/merge")
+    public ResponseEntity<TagDTO> mergeTags(@RequestBody TagMergeRequestDTO request) {
+        Tag mergedTag = tagService.mergeTags(request.getTargetTagId(), request.getSourceTagIds());
+        return ResponseEntity.ok(TagDTO.fromEntity(mergedTag));
     }
 }
