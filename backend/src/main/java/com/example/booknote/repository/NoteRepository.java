@@ -54,4 +54,11 @@ public interface NoteRepository extends JpaRepository<Note, Long>, JpaSpecificat
 
     @Query("SELECT DISTINCT n.pageNumber FROM Note n WHERE n.book.id = :bookId AND n.pageNumber IS NOT NULL ORDER BY n.pageNumber")
     List<Integer> findDistinctPageNumbersByBookId(@Param("bookId") Long bookId);
+
+    @Query("SELECT COUNT(n) > 0 FROM Note n WHERE n.book.id = :bookId AND " +
+           "(LOWER(n.title) LIKE '%总结%' OR LOWER(n.title) LIKE '%读后感%' OR " +
+           "LOWER(n.title) LIKE '%书评%' OR LOWER(n.title) LIKE '%感悟%' OR " +
+           "LOWER(n.title) LIKE '%读书心得%' OR " +
+           "EXISTS (SELECT t FROM n.tags t WHERE LOWER(t.name) = '总结'))")
+    boolean hasSummaryNoteByBookId(@Param("bookId") Long bookId);
 }

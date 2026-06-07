@@ -9,12 +9,18 @@ import HeatmapView from '../views/HeatmapView.vue'
 import TagGraphView from '../views/TagGraphView.vue'
 import CardWall from '../views/CardWall.vue'
 import SimilarNotes from '../views/SimilarNotes.vue'
+import WakeUpListView from '../views/WakeUpListView.vue'
 
 const routes = [
   {
     path: '/',
     name: 'BookList',
     component: BookList
+  },
+  {
+    path: '/wake-up',
+    name: 'WakeUpList',
+    component: WakeUpListView
   },
   {
     path: '/cards',

@@ -202,7 +202,11 @@ public class ActivityService {
 
         List<Book> stagnantReadingBooks = bookRepository.findReadingBooksWithNoNotesSince(thresholdDate);
         List<Book> neglectedWantToReadBooks = bookRepository.findWantToReadBooksOlderThan(thresholdDate);
-        List<Book> readWithoutSummaryBooks = bookRepository.findReadBooksWithNoNotes();
+        List<Book> allReadBooks = bookRepository.findByStatus(Book.ReadingStatus.READ);
+
+        List<Book> readWithoutSummaryBooks = allReadBooks.stream()
+                .filter(book -> !noteRepository.hasSummaryNoteByBookId(book.getId()))
+                .collect(Collectors.toList());
 
         List<WakeUpBookItem> stagnantReading = stagnantReadingBooks.stream()
                 .map(book -> {
@@ -238,10 +242,13 @@ public class ActivityService {
         List<WakeUpBookItem> readWithoutSummary = readWithoutSummaryBooks.stream()
                 .map(book -> {
                     WakeUpBookItem item = new WakeUpBookItem();
-                    item.setBook(BookDTO.fromEntity(book, 0L));
+                    long noteCount = bookRepository.countNotesByBookId(book.getId());
+                    item.setBook(BookDTO.fromEntity(book, noteCount));
                     long days = ChronoUnit.DAYS.between(book.getUpdatedAt().toLocalDate(), now.toLocalDate());
                     item.setDaysInactive(days);
-                    item.setReason("已读完 " + days + " 天但无总结笔记");
+                    item.setReason(noteCount > 0
+                            ? "已读完 " + days + " 天，有 " + noteCount + " 条笔记但无总结"
+                            : "已读完 " + days + " 天但无总结笔记");
                     item.setCategory("readWithoutSummary");
                     return item;
                 })
