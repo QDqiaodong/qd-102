@@ -18,7 +18,10 @@ export const bookApi = {
   updateBook: (id, book) => client.put(`/books/${id}`, book),
   deleteBook: (id) => client.delete(`/books/${id}`),
   searchBooks: (params) => client.get('/books/search', { params }),
-  getAllCategories: () => client.get('/books/categories')
+  getAllCategories: () => client.get('/books/categories'),
+  findDuplicates: () => client.get('/books/duplicates'),
+  getMergePreview: (bookIds) => client.post('/books/merge-preview', bookIds),
+  mergeBooks: (targetBookId, sourceBookIds) => client.post('/books/merge', { targetBookId, sourceBookIds })
 }
 
 export const noteApi = {
@@ -52,7 +55,8 @@ export const activityApi = {
 }
 
 export const searchApi = {
-  fullTextSearch: (keyword) => client.get('/search', { params: { keyword } })
+  fullTextSearch: (keyword) => client.get('/search', { params: { keyword } }),
+  advancedSearch: (params = {}) => client.get('/search/advanced', { params })
 }
 
 export const cardApi = {

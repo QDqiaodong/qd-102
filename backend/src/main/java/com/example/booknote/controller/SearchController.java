@@ -13,10 +13,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/search")
@@ -62,6 +64,39 @@ public class SearchController {
         return ResponseEntity.ok(Map.of(
             "books", books,
             "notes", notes
+        ));
+    }
+
+    @GetMapping("/advanced")
+    public ResponseEntity<Map<String, Object>> advancedSearch(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) List<Long> tagIds,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) String searchType) throws IOException {
+        
+        LocalDate start = startDate != null && !startDate.isEmpty() ? LocalDate.parse(startDate) : null;
+        LocalDate end = endDate != null && !endDate.isEmpty() ? LocalDate.parse(endDate) : null;
+        
+        SearchService.AdvancedSearchResult result = searchService.advancedSearch(
+            keyword, status, category, tagIds, start, end, searchType
+        );
+        
+        List<BookDTO> bookDTOs = result.getBooks().stream()
+                .map(book -> BookDTO.fromEntity(book, book.getNotes() != null ? (long) book.getNotes().size() : 0L))
+                .collect(Collectors.toList());
+        
+        List<NoteDTO> noteDTOs = result.getNotes().stream()
+                .map(NoteDTO::fromEntity)
+                .collect(Collectors.toList());
+        
+        return ResponseEntity.ok(Map.of(
+            "books", bookDTOs,
+            "notes", noteDTOs,
+            "totalBooks", bookDTOs.size(),
+            "totalNotes", noteDTOs.size()
         ));
     }
 }

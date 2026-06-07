@@ -83,7 +83,62 @@
 
     <div class="list-header">
       <h2 class="section-title">我的书架</h2>
-      <button @click="showAddModal = true" class="add-btn">+ 添加书籍</button>
+      <div class="header-actions">
+        <button @click="checkDuplicates" class="check-duplicate-btn">
+          🔍 检测重复书籍
+        </button>
+        <button @click="showAddModal = true" class="add-btn">+ 添加书籍</button>
+      </div>
+    </div>
+
+    <div v-if="duplicateGroups.length > 0" class="duplicates-section">
+      <div class="duplicates-header">
+        <h3>⚠️ 发现 {{ duplicateGroups.length }} 组重复书籍</h3>
+        <button @click="duplicateGroups = []" class="close-duplicates">×</button>
+      </div>
+      <div class="duplicate-groups">
+        <div v-for="(group, groupIndex) in duplicateGroups" :key="groupIndex" class="duplicate-group">
+          <div class="duplicate-group-title">
+            <span>{{ group[0].title }}</span>
+            <span class="duplicate-count">{{ group.length }} 条重复</span>
+          </div>
+          <div class="duplicate-books">
+            <div 
+              v-for="book in group" 
+              :key="book.id" 
+              :class="['duplicate-book-item', { 'selected': selectedMergeBooks.includes(book.id) }]"
+              @click="toggleMergeBook(book.id)"
+            >
+              <div class="merge-checkbox">
+                <div :class="['checkbox', { 'checked': selectedMergeBooks.includes(book.id) }]">
+                  ✓
+                </div>
+              </div>
+              <img :src="book.coverUrl || 'https://via.placeholder.com/60x80?text=No+Cover'" :alt="book.title" />
+              <div class="duplicate-book-info">
+                <h4>{{ book.title }}</h4>
+                <p>{{ book.author || '未知作者' }}</p>
+                <div class="duplicate-book-meta">
+                  <span :class="['status-badge', book.status?.toLowerCase()]">{{ getStatusLabel(book.status) }}</span>
+                  <span class="note-count">📝 {{ book.noteCount }} 条笔记</span>
+                  <span v-if="book.progress !== null" class="progress-text">{{ book.progress }}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="duplicate-actions">
+            <button 
+              @click="selectAllInGroup(group)" 
+              class="select-all-btn"
+            >全选本组</button>
+            <button 
+              v-if="getSelectedCountInGroup(group) >= 2"
+              @click="previewMerge(group)" 
+              class="merge-btn"
+            >合并选中</button>
+          </div>
+        </div>
+      </div>
     </div>
     
     <div class="books-grid">
@@ -161,6 +216,70 @@
         </form>
       </div>
     </div>
+
+    <div v-if="showMergeModal" class="modal-overlay" @click.self="closeMergeModal">
+      <div class="modal-content merge-modal">
+        <h2>合并书籍</h2>
+        <p class="merge-warning">
+          ⚠️ 合并后以下书籍的笔记、标签和阅读进度将合并到主记录中，被合并的书籍将被删除。此操作不可撤销。
+        </p>
+
+        <div v-if="mergePreview" class="merge-preview">
+          <div class="preview-section">
+            <h4>合并后信息</h4>
+            <div class="preview-stats">
+              <div class="stat-item">
+                <span class="stat-label">书籍数量</span>
+                <span class="stat-value">{{ mergePreview.bookCount }} → 1</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">笔记总数</span>
+                <span class="stat-value">{{ mergePreview.totalNotes }} 条</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">合并进度</span>
+                <span class="stat-value">{{ mergePreview.mergedProgress }}%</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="preview-section">
+            <h4>选择主记录</h4>
+            <p class="hint-text">主记录将保留封面、分类等信息</p>
+            <div class="primary-selector">
+              <div 
+                v-for="book in mergePreview.books" 
+                :key="book.id"
+                :class="['primary-option', { 'selected': targetBookId === book.id }]"
+                @click="targetBookId = book.id"
+              >
+                <div class="radio-btn">
+                  <div v-if="targetBookId === book.id" class="radio-inner"></div>
+                </div>
+                <img :src="book.coverUrl || 'https://via.placeholder.com/50x70?text=No+Cover'" :alt="book.title" />
+                <div class="primary-info">
+                  <h5>{{ book.title }}</h5>
+                  <p>{{ book.author || '未知作者' }}</p>
+                  <span class="primary-badge" v-if="book.id === mergePreview.primaryBookId">（最早创建）</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" @click="closeMergeModal" class="cancel-btn">取消</button>
+          <button 
+            type="button" 
+            @click="confirmMerge" 
+            class="submit-btn merge-confirm-btn"
+            :disabled="!targetBookId || merging"
+          >
+            {{ merging ? '合并中...' : '确认合并' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -172,6 +291,12 @@ const books = ref([])
 const categories = ref([])
 const showAddModal = ref(false)
 const editingBook = ref(null)
+const duplicateGroups = ref([])
+const selectedMergeBooks = ref([])
+const showMergeModal = ref(false)
+const mergePreview = ref(null)
+const targetBookId = ref(null)
+const merging = ref(false)
 const formData = ref({
   title: '',
   author: '',
@@ -316,6 +441,91 @@ const closeModal = () => {
     status: 'READING',
     progress: 0,
     description: ''
+  }
+}
+
+const checkDuplicates = async () => {
+  try {
+    const response = await bookApi.findDuplicates()
+    duplicateGroups.value = response.data
+    selectedMergeBooks.value = []
+  } catch (error) {
+    console.error('检测重复书籍失败:', error)
+  }
+}
+
+const toggleMergeBook = (bookId) => {
+  const index = selectedMergeBooks.value.indexOf(bookId)
+  if (index > -1) {
+    selectedMergeBooks.value.splice(index, 1)
+  } else {
+    selectedMergeBooks.value.push(bookId)
+  }
+}
+
+const selectAllInGroup = (group) => {
+  const groupIds = group.map(b => b.id)
+  const allSelected = groupIds.every(id => selectedMergeBooks.value.includes(id))
+  
+  if (allSelected) {
+    selectedMergeBooks.value = selectedMergeBooks.value.filter(id => !groupIds.includes(id))
+  } else {
+    for (const id of groupIds) {
+      if (!selectedMergeBooks.value.includes(id)) {
+        selectedMergeBooks.value.push(id)
+      }
+    }
+  }
+}
+
+const getSelectedCountInGroup = (group) => {
+  return group.filter(b => selectedMergeBooks.value.includes(b.id)).length
+}
+
+const previewMerge = async (group) => {
+  const selectedIds = group.filter(b => selectedMergeBooks.value.includes(b.id)).map(b => b.id)
+  if (selectedIds.length < 2) return
+  
+  try {
+    const response = await bookApi.getMergePreview(selectedIds)
+    mergePreview.value = response.data
+    targetBookId.value = response.data.primaryBookId
+    showMergeModal.value = true
+  } catch (error) {
+    console.error('获取合并预览失败:', error)
+  }
+}
+
+const closeMergeModal = () => {
+  showMergeModal.value = false
+  mergePreview.value = null
+  targetBookId.value = null
+  merging.value = false
+}
+
+const confirmMerge = async () => {
+  if (!targetBookId.value || merging.value) return
+  
+  if (!confirm('确定要合并这些书籍吗？此操作不可撤销！')) return
+  
+  merging.value = true
+  try {
+    const sourceIds = mergePreview.value.books
+      .filter(b => b.id !== targetBookId.value)
+      .map(b => b.id)
+    
+    await bookApi.mergeBooks(targetBookId.value, sourceIds)
+    
+    closeMergeModal()
+    duplicateGroups.value = []
+    selectedMergeBooks.value = []
+    await loadBooks()
+    await loadCategories()
+  } catch (error) {
+    console.error('合并书籍失败:', error)
+    alert('合并失败，请重试')
+  } finally {
+    merging.value = false
   }
 }
 
@@ -745,5 +955,383 @@ watch(filters, () => {
 .submit-btn {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.check-duplicate-btn {
+  padding: 0.5rem 1rem;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #555;
+  transition: all 0.2s;
+}
+
+.check-duplicate-btn:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.duplicates-section {
+  background: #fff8e1;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  border: 1px solid #ffe082;
+}
+
+.duplicates-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.duplicates-header h3 {
+  margin: 0;
+  color: #f57f17;
+  font-size: 1.1rem;
+}
+
+.close-duplicates {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #999;
+  padding: 0 0.5rem;
+}
+
+.close-duplicates:hover {
+  color: #666;
+}
+
+.duplicate-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.duplicate-group {
+  background: white;
+  border-radius: 8px;
+  padding: 1rem;
+  border: 1px solid #ffe082;
+}
+
+.duplicate-group-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.duplicate-group-title span:first-child {
+  font-weight: 600;
+  color: #333;
+}
+
+.duplicate-count {
+  background: #fff3e0;
+  color: #e65100;
+  padding: 0.15rem 0.6rem;
+  border-radius: 10px;
+  font-size: 0.8rem;
+}
+
+.duplicate-books {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.duplicate-book-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.duplicate-book-item:hover {
+  background: #fafafa;
+}
+
+.duplicate-book-item.selected {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.05);
+}
+
+.merge-checkbox {
+  flex-shrink: 0;
+}
+
+.checkbox {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  color: transparent;
+  transition: all 0.2s;
+}
+
+.checkbox.checked {
+  background: #667eea;
+  border-color: #667eea;
+  color: white;
+}
+
+.duplicate-book-item img {
+  width: 40px;
+  height: 55px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.duplicate-book-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.duplicate-book-info h4 {
+  margin: 0 0 0.25rem 0;
+  font-size: 0.9rem;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.duplicate-book-info p {
+  margin: 0 0 0.35rem 0;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.duplicate-book-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.note-count {
+  font-size: 0.75rem;
+  color: #888;
+}
+
+.progress-text {
+  font-size: 0.75rem;
+  color: #999;
+}
+
+.duplicate-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #f0f0f0;
+}
+
+.select-all-btn {
+  padding: 0.4rem 0.75rem;
+  background: #f0f0f0;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: #555;
+}
+
+.select-all-btn:hover {
+  background: #e0e0e0;
+}
+
+.merge-btn {
+  padding: 0.4rem 0.75rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  margin-left: auto;
+}
+
+.merge-btn:hover {
+  opacity: 0.9;
+}
+
+.merge-modal {
+  max-width: 550px;
+}
+
+.merge-warning {
+  background: #fff3e0;
+  color: #e65100;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin-bottom: 1.5rem;
+}
+
+.merge-preview {
+  margin-bottom: 1rem;
+}
+
+.preview-section {
+  margin-bottom: 1.5rem;
+}
+
+.preview-section:last-child {
+  margin-bottom: 0;
+}
+
+.preview-section h4 {
+  margin: 0 0 0.75rem 0;
+  color: #333;
+  font-size: 1rem;
+}
+
+.hint-text {
+  color: #999;
+  font-size: 0.8rem;
+  margin: 0 0 0.75rem 0;
+}
+
+.preview-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  background: #f9f9f9;
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-label {
+  display: block;
+  font-size: 0.8rem;
+  color: #888;
+  margin-bottom: 0.25rem;
+}
+
+.stat-value {
+  display: block;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.primary-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.primary-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 2px solid #eee;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.primary-option:hover {
+  border-color: #ddd;
+  background: #fafafa;
+}
+
+.primary-option.selected {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.05);
+}
+
+.radio-btn {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #ddd;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.primary-option.selected .radio-btn {
+  border-color: #667eea;
+}
+
+.radio-inner {
+  width: 10px;
+  height: 10px;
+  background: #667eea;
+  border-radius: 50%;
+}
+
+.primary-option img {
+  width: 40px;
+  height: 55px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.primary-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.primary-info h5 {
+  margin: 0 0 0.2rem 0;
+  font-size: 0.9rem;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.primary-info p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.primary-badge {
+  display: inline-block;
+  margin-top: 0.2rem;
+  font-size: 0.7rem;
+  color: #667eea;
+  background: rgba(102, 126, 234, 0.1);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+.merge-confirm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

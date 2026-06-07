@@ -10,6 +10,7 @@ import com.example.booknote.repository.TagRepository;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
@@ -19,9 +20,12 @@ import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.highlight.Formatter;
 import org.apache.lucene.search.highlight.Highlighter;
@@ -33,7 +37,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.persistence.criteria.Predicate;
 import java.io.IOException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -76,6 +84,16 @@ public class SearchService {
                 doc.add(new TextField("title", book.getTitle(), Field.Store.YES));
                 doc.add(new TextField("author", book.getAuthor() != null ? book.getAuthor() : "", Field.Store.YES));
                 doc.add(new TextField("description", book.getDescription() != null ? book.getDescription() : "", Field.Store.YES));
+                doc.add(new StringField("status", book.getStatus() != null ? book.getStatus().name() : "", Field.Store.YES));
+                doc.add(new StringField("category", book.getCategory() != null ? book.getCategory() : "", Field.Store.YES));
+                doc.add(new LongPoint("createdAt", book.getCreatedAt() != null ? 
+                    book.getCreatedAt().toEpochSecond(ZoneOffset.UTC) : 0L));
+                doc.add(new LongPoint("updatedAt", book.getUpdatedAt() != null ? 
+                    book.getUpdatedAt().toEpochSecond(ZoneOffset.UTC) : 0L));
+                doc.add(new StringField("createdAtStr", book.getCreatedAt() != null ? 
+                    book.getCreatedAt().toString() : "", Field.Store.YES));
+                doc.add(new StringField("updatedAtStr", book.getUpdatedAt() != null ? 
+                    book.getUpdatedAt().toString() : "", Field.Store.YES));
                 writer.addDocument(doc);
             }
             
@@ -83,17 +101,72 @@ public class SearchService {
                 Document doc = new Document();
                 doc.add(new StringField("type", "note", Field.Store.YES));
                 doc.add(new StringField("id", note.getId().toString(), Field.Store.YES));
+                doc.add(new StringField("bookId", note.getBook() != null ? note.getBook().getId().toString() : "", Field.Store.YES));
                 doc.add(new TextField("title", note.getTitle(), Field.Store.YES));
                 String tagNames = note.getTags() != null ? 
                     note.getTags().stream().map(Tag::getName).collect(Collectors.joining(" ")) : "";
                 doc.add(new TextField("tags", tagNames, Field.Store.YES));
+                String tagIds = note.getTags() != null ? 
+                    note.getTags().stream().map(t -> t.getId().toString()).collect(Collectors.joining(" ")) : "";
+                doc.add(new StringField("tagIds", tagIds, Field.Store.NO));
                 doc.add(new TextField("content", note.getContent() != null ? note.getContent() : "", Field.Store.YES));
+                doc.add(new LongPoint("createdAt", note.getCreatedAt() != null ? 
+                    note.getCreatedAt().toEpochSecond(ZoneOffset.UTC) : 0L));
+                doc.add(new LongPoint("updatedAt", note.getUpdatedAt() != null ? 
+                    note.getUpdatedAt().toEpochSecond(ZoneOffset.UTC) : 0L));
+                doc.add(new StringField("createdAtStr", note.getCreatedAt() != null ? 
+                    note.getCreatedAt().toString() : "", Field.Store.YES));
+                doc.add(new StringField("updatedAtStr", note.getUpdatedAt() != null ? 
+                    note.getUpdatedAt().toString() : "", Field.Store.YES));
+                if (note.getBook() != null) {
+                    Book book = note.getBook();
+                    doc.add(new StringField("bookStatus", book.getStatus() != null ? book.getStatus().name() : "", Field.Store.NO));
+                    doc.add(new StringField("bookCategory", book.getCategory() != null ? book.getCategory() : "", Field.Store.NO));
+                }
                 writer.addDocument(doc);
             }
         }
     }
     
     public List<SearchResult> search(String keyword) throws IOException {
+        return advancedSearch(keyword, null, null, null, null, null, null);
+    }
+
+    public AdvancedSearchResult advancedSearch(String keyword, String status, String category, 
+                                                List<Long> tagIds, LocalDate startDate, LocalDate endDate,
+                                                String searchType) throws IOException {
+        AdvancedSearchResult result = new AdvancedSearchResult();
+        
+        List<Long> luceneBookIds = new ArrayList<>();
+        List<Long> luceneNoteIds = new ArrayList<>();
+        
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            List<SearchResult> luceneResults = searchFromLucene(keyword);
+            for (SearchResult sr : luceneResults) {
+                if ("book".equals(sr.getType())) {
+                    luceneBookIds.add(sr.getId());
+                } else if ("note".equals(sr.getType())) {
+                    luceneNoteIds.add(sr.getId());
+                }
+            }
+        }
+        
+        List<Book> filteredBooks = filterBooks(luceneBookIds, status, category, startDate, endDate, keyword != null && !keyword.trim().isEmpty());
+        List<Note> filteredNotes = filterNotes(luceneNoteIds, status, category, tagIds, startDate, endDate, keyword != null && !keyword.trim().isEmpty());
+        
+        if ("book".equals(searchType)) {
+            filteredNotes = new ArrayList<>();
+        } else if ("note".equals(searchType)) {
+            filteredBooks = new ArrayList<>();
+        }
+        
+        result.setBooks(filteredBooks);
+        result.setNotes(filteredNotes);
+        
+        return result;
+    }
+
+    private List<SearchResult> searchFromLucene(String keyword) throws IOException {
         List<SearchResult> results = new ArrayList<>();
         
         try (IndexReader reader = DirectoryReader.open(directory)) {
@@ -109,12 +182,7 @@ public class SearchService {
             } catch (ParseException e) {
                 throw new IOException("Failed to parse search keyword", e);
             }
-            TopDocs topDocs = searcher.search(query, 50);
-            
-            Formatter formatter = new SimpleHTMLFormatter("[[HIGHLIGHT]]", "[[/HIGHLIGHT]]");
-            QueryScorer scorer = new QueryScorer(query);
-            Highlighter highlighter = new Highlighter(formatter, scorer);
-            highlighter.setTextFragmenter(new SimpleSpanFragmenter(scorer, 200));
+            TopDocs topDocs = searcher.search(query, 200);
             
             for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
                 Document doc = searcher.doc(scoreDoc.doc);
@@ -122,39 +190,84 @@ public class SearchService {
                 result.setType(doc.get("type"));
                 result.setId(Long.parseLong(doc.get("id")));
                 result.setTitle(doc.get("title"));
-                
-                try {
-                    String highlightedTitle = highlighter.getBestFragment(analyzer, "title", doc.get("title"));
-                    result.setHighlightedTitle(highlightedTitle != null ? highlightedTitle : doc.get("title"));
-                    
-                    if ("note".equals(result.getType())) {
-                        String content = doc.get("content");
-                        String plainContent = content.replaceAll("<[^>]*>", " ");
-                        String highlightedContent = highlighter.getBestFragment(analyzer, "content", plainContent);
-                        if (highlightedContent == null && plainContent.length() > 0) {
-                            highlightedContent = plainContent.substring(0, Math.min(150, plainContent.length())) + "...";
-                        }
-                        result.setHighlightedContent(highlightedContent);
-                        
-                        String highlightedTags = highlighter.getBestFragment(analyzer, "tags", doc.get("tags"));
-                        result.setHighlightedTags(highlightedTags);
-                    } else if ("book".equals(result.getType())) {
-                        String description = doc.get("description");
-                        String highlightedDesc = highlighter.getBestFragment(analyzer, "description", description);
-                        if (highlightedDesc == null && description != null && description.length() > 0) {
-                            highlightedDesc = description.substring(0, Math.min(150, description.length())) + "...";
-                        }
-                        result.setHighlightedContent(highlightedDesc);
-                    }
-                } catch (Exception e) {
-                    result.setHighlightedTitle(result.getTitle());
-                }
-                
                 results.add(result);
             }
         }
         
         return results;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Book> filterBooks(List<Long> bookIds, String status, String category, 
+                                    LocalDate startDate, LocalDate endDate, boolean hasKeywordFilter) {
+        return bookRepository.findAll((root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            
+            if (hasKeywordFilter && !bookIds.isEmpty()) {
+                predicates.add(root.get("id").in(bookIds));
+            } else if (hasKeywordFilter && bookIds.isEmpty()) {
+                predicates.add(cb.isFalse(cb.literal(true)));
+            }
+            
+            if (status != null && !status.isEmpty()) {
+                predicates.add(cb.equal(root.get("status"), Book.ReadingStatus.valueOf(status)));
+            }
+            
+            if (category != null && !category.isEmpty()) {
+                predicates.add(cb.equal(root.get("category"), category));
+            }
+            
+            if (startDate != null) {
+                LocalDateTime start = startDate.atStartOfDay();
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), start));
+            }
+            
+            if (endDate != null) {
+                LocalDateTime end = endDate.plusDays(1).atStartOfDay();
+                predicates.add(cb.lessThan(root.get("createdAt"), end));
+            }
+            
+            return cb.and(predicates.toArray(new Predicate[0]));
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Note> filterNotes(List<Long> noteIds, String bookStatus, String bookCategory,
+                                    List<Long> tagIds, LocalDate startDate, LocalDate endDate, boolean hasKeywordFilter) {
+        return noteRepository.findAll((root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            
+            if (hasKeywordFilter && !noteIds.isEmpty()) {
+                predicates.add(root.get("id").in(noteIds));
+            } else if (hasKeywordFilter && noteIds.isEmpty()) {
+                predicates.add(cb.isFalse(cb.literal(true)));
+            }
+            
+            if (bookStatus != null && !bookStatus.isEmpty()) {
+                predicates.add(cb.equal(root.get("book").get("status"), Book.ReadingStatus.valueOf(bookStatus)));
+            }
+            
+            if (bookCategory != null && !bookCategory.isEmpty()) {
+                predicates.add(cb.equal(root.get("book").get("category"), bookCategory));
+            }
+            
+            if (tagIds != null && !tagIds.isEmpty()) {
+                query.distinct(true);
+                predicates.add(root.join("tags").get("id").in(tagIds));
+            }
+            
+            if (startDate != null) {
+                LocalDateTime start = startDate.atStartOfDay();
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), start));
+            }
+            
+            if (endDate != null) {
+                LocalDateTime end = endDate.plusDays(1).atStartOfDay();
+                predicates.add(cb.lessThan(root.get("createdAt"), end));
+            }
+            
+            return cb.and(predicates.toArray(new Predicate[0]));
+        });
     }
     
     public static class SearchResult {
@@ -177,5 +290,15 @@ public class SearchService {
         public void setHighlightedContent(String highlightedContent) { this.highlightedContent = highlightedContent; }
         public String getHighlightedTags() { return highlightedTags; }
         public void setHighlightedTags(String highlightedTags) { this.highlightedTags = highlightedTags; }
+    }
+
+    public static class AdvancedSearchResult {
+        private List<Book> books = new ArrayList<>();
+        private List<Note> notes = new ArrayList<>();
+
+        public List<Book> getBooks() { return books; }
+        public void setBooks(List<Book> books) { this.books = books; }
+        public List<Note> getNotes() { return notes; }
+        public void setNotes(List<Note> notes) { this.notes = notes; }
     }
 }

@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
@@ -83,5 +84,34 @@ public class BookController {
         }
         List<BookDTO> dtos = books.stream().map(BookDTO::fromEntity).collect(Collectors.toList());
         return ResponseEntity.ok(dtos);
+    }
+
+    @GetMapping("/duplicates")
+    public ResponseEntity<List<List<BookDTO>>> findDuplicates() {
+        List<List<Book>> duplicates = bookService.findDuplicateBooks();
+        List<List<BookDTO>> result = duplicates.stream()
+                .map(group -> group.stream()
+                        .map(book -> BookDTO.fromEntity(book, bookService.getNoteCountForBook(book.getId())))
+                        .collect(Collectors.toList()))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/merge-preview")
+    public ResponseEntity<BookService.MergePreview> getMergePreview(@RequestBody List<Long> bookIds) {
+        BookService.MergePreview preview = bookService.getMergePreview(bookIds);
+        return ResponseEntity.ok(preview);
+    }
+
+    @PostMapping("/merge")
+    public ResponseEntity<BookDTO> mergeBooks(@RequestBody Map<String, Object> request) {
+        Long targetBookId = Long.valueOf(request.get("targetBookId").toString());
+        @SuppressWarnings("unchecked")
+        List<Long> sourceBookIds = ((List<?>) request.get("sourceBookIds")).stream()
+                .map(id -> Long.valueOf(id.toString()))
+                .collect(Collectors.toList());
+        
+        Book merged = bookService.mergeBooks(targetBookId, sourceBookIds);
+        return ResponseEntity.ok(BookDTO.fromEntity(merged, bookService.getNoteCountForBook(merged.getId())));
     }
 }
