@@ -32,7 +32,7 @@ public class StatisticsService {
     @Autowired
     private Analyzer analyzer;
 
-    private static final Set<String> STOP_WORDS = Set.of(
+    private static final Set<String> STOP_WORDS = new HashSet<>(Arrays.asList(
             "的", "了", "在", "是", "我", "有", "和", "就",
             "不", "人", "都", "一", "一个", "上", "也", "很",
             "到", "说", "要", "去", "你", "会", "着", "没有",
@@ -71,7 +71,7 @@ public class StatisticsService {
             "这里", "那里", "哪里", "此处", "彼处",
             "下来", "起来", "出来", "上来", "过去",
             "书", "本书", "这本", "那本"
-    );
+    ));
 
     public ReadingOverviewDTO getReadingOverview(int months) {
         ReadingOverviewDTO overview = new ReadingOverviewDTO();
