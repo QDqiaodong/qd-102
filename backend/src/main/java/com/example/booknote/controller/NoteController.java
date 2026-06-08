@@ -37,6 +37,19 @@ class NotePageDTO {
     public void setTotalPages(int totalPages) { this.totalPages = totalPages; }
 }
 
+class ReadingProgressRequestDTO {
+    private Long lastNoteId;
+    private Integer notePageIndex;
+    private Integer scrollTop;
+
+    public Long getLastNoteId() { return lastNoteId; }
+    public void setLastNoteId(Long lastNoteId) { this.lastNoteId = lastNoteId; }
+    public Integer getNotePageIndex() { return notePageIndex; }
+    public void setNotePageIndex(Integer notePageIndex) { this.notePageIndex = notePageIndex; }
+    public Integer getScrollTop() { return scrollTop; }
+    public void setScrollTop(Integer scrollTop) { this.scrollTop = scrollTop; }
+}
+
 @RestController
 @RequestMapping("/api/notes")
 public class NoteController {
@@ -137,16 +150,15 @@ public class NoteController {
     @PostMapping("/book/{bookId}/reading-progress")
     public ResponseEntity<NoteReadingProgressService.ProgressDTO> saveReadingProgress(
             @PathVariable Long bookId,
-            @RequestBody Map<String, Object> request) {
-        Long lastNoteId = request.get("lastNoteId") != null ?
-                Long.valueOf(request.get("lastNoteId").toString()) : null;
-        Integer notePageIndex = request.get("notePageIndex") != null ?
-                Integer.valueOf(request.get("notePageIndex").toString()) : null;
-        Integer scrollTop = request.get("scrollTop") != null ?
-                Integer.valueOf(request.get("scrollTop").toString()) : null;
-
-        NoteReadingProgress progress = progressService.saveProgress(bookId, lastNoteId, notePageIndex, scrollTop);
-        return ResponseEntity.ok(new NoteReadingProgressService.ProgressDTO(progress));
+            @RequestBody ReadingProgressRequestDTO request) {
+        return ResponseEntity.ok(new NoteReadingProgressService.ProgressDTO(
+                progressService.saveProgress(
+                        bookId,
+                        request.getLastNoteId(),
+                        request.getNotePageIndex(),
+                        request.getScrollTop()
+                )
+        ));
     }
 
     @DeleteMapping("/book/{bookId}/reading-progress")
