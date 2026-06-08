@@ -23,6 +23,10 @@ public class BookDTO {
     private Long noteCount;
     
     public static BookDTO fromEntity(Book book) {
+        return fromEntity(book, null);
+    }
+    
+    public static BookDTO fromEntity(Book book, Long noteCount) {
         BookDTO dto = new BookDTO();
         dto.setId(book.getId());
         dto.setTitle(book.getTitle());
@@ -32,13 +36,11 @@ public class BookDTO {
         dto.setStatus(book.getStatus() != null ? book.getStatus().name() : null);
         dto.setProgress(book.getProgress());
         dto.setDescription(book.getDescription());
-        dto.setNoteCount(book.getNotes() != null ? (long) book.getNotes().size() : 0L);
-        return dto;
-    }
-    
-    public static BookDTO fromEntity(Book book, long noteCount) {
-        BookDTO dto = fromEntity(book);
-        dto.setNoteCount(noteCount);
+        if (noteCount != null) {
+            dto.setNoteCount(noteCount);
+        } else {
+            dto.setNoteCount(book.getNotes() != null ? (long) book.getNotes().size() : 0L);
+        }
         return dto;
     }
     

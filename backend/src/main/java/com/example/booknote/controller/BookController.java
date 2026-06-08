@@ -2,6 +2,7 @@
 package com.example.booknote.controller;
 
 import com.example.booknote.dto.BookDTO;
+import com.example.booknote.dto.BookMergeRequestDTO;
 import com.example.booknote.entity.Book;
 import com.example.booknote.service.BookService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,7 +11,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
@@ -104,14 +104,8 @@ public class BookController {
     }
 
     @PostMapping("/merge")
-    public ResponseEntity<BookDTO> mergeBooks(@RequestBody Map<String, Object> request) {
-        Long targetBookId = Long.valueOf(request.get("targetBookId").toString());
-        @SuppressWarnings("unchecked")
-        List<Long> sourceBookIds = ((List<?>) request.get("sourceBookIds")).stream()
-                .map(id -> Long.valueOf(id.toString()))
-                .collect(Collectors.toList());
-        
-        Book merged = bookService.mergeBooks(targetBookId, sourceBookIds);
+    public ResponseEntity<BookDTO> mergeBooks(@RequestBody BookMergeRequestDTO request) {
+        Book merged = bookService.mergeBooks(request.getTargetBookId(), request.getSourceBookIds());
         return ResponseEntity.ok(BookDTO.fromEntity(merged, bookService.getNoteCountForBook(merged.getId())));
     }
 }

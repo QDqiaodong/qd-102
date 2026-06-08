@@ -1,6 +1,7 @@
 
 package com.example.booknote.service;
 
+import com.example.booknote.dto.BookDTO;
 import com.example.booknote.entity.Book;
 import com.example.booknote.entity.Note;
 import com.example.booknote.entity.Tag;
@@ -170,12 +171,7 @@ public class BookService {
                 .orElseThrow(() -> new RuntimeException("目标书籍不存在"));
 
         int maxProgress = targetBook.getProgress() != null ? targetBook.getProgress() : 0;
-        List<Note> allNotes = new ArrayList<>();
-        List<Tag> allTags = new ArrayList<>();
-        
-        if (targetBook.getNotes() != null) {
-            allNotes.addAll(targetBook.getNotes());
-        }
+        int totalNotes = 0;
 
         for (Long sourceId : sourceBookIds) {
             if (sourceId.equals(targetBookId)) continue;
@@ -187,18 +183,12 @@ public class BookService {
                 maxProgress = sourceBook.getProgress();
             }
 
-            if (sourceBook.getNotes() != null) {
-                for (Note note : sourceBook.getNotes()) {
-                    note.setBook(targetBook);
-                    allNotes.add(note);
-                    if (note.getTags() != null) {
-                        for (Tag tag : note.getTags()) {
-                            if (!allTags.contains(tag)) {
-                                allTags.add(tag);
-                            }
-                        }
-                    }
-                }
+            List<Note> sourceNotes = noteRepository.findByBookId(sourceId);
+            totalNotes += sourceNotes.size();
+
+            for (Note note : sourceNotes) {
+                note.setBook(targetBook);
+                noteRepository.save(note);
             }
 
             if (targetBook.getDescription() == null || targetBook.getDescription().isEmpty()) {
@@ -219,12 +209,12 @@ public class BookService {
                 }
             }
 
+            sourceBook.setNotes(new ArrayList<>());
+            bookRepository.save(sourceBook);
             bookRepository.delete(sourceBook);
         }
 
         targetBook.setProgress(maxProgress);
-        targetBook.setNotes(allNotes);
-        
         Book saved = bookRepository.save(targetBook);
         
         try {
@@ -256,16 +246,19 @@ public class BookService {
         
         int totalNotes = 0;
         int maxProgress = 0;
+        List<BookDTO> bookDTOs = new ArrayList<>();
         for (Book book : books) {
-            totalNotes += book.getNotes() != null ? book.getNotes().size() : 0;
+            long noteCount = bookRepository.countNotesByBookId(book.getId());
+            totalNotes += noteCount;
             if (book.getProgress() != null && book.getProgress() > maxProgress) {
                 maxProgress = book.getProgress();
             }
+            bookDTOs.add(BookDTO.fromEntity(book, noteCount));
         }
         
         preview.setTotalNotes(totalNotes);
         preview.setMergedProgress(maxProgress);
-        preview.setBooks(books);
+        preview.setBooks(bookDTOs);
         
         return preview;
     }
@@ -275,7 +268,7 @@ public class BookService {
         private int bookCount;
         private int totalNotes;
         private int mergedProgress;
-        private List<Book> books = new ArrayList<>();
+        private List<BookDTO> books = new ArrayList<>();
 
         public Long getPrimaryBookId() { return primaryBookId; }
         public void setPrimaryBookId(Long primaryBookId) { this.primaryBookId = primaryBookId; }
@@ -285,7 +278,7 @@ public class BookService {
         public void setTotalNotes(int totalNotes) { this.totalNotes = totalNotes; }
         public int getMergedProgress() { return mergedProgress; }
         public void setMergedProgress(int mergedProgress) { this.mergedProgress = mergedProgress; }
-        public List<Book> getBooks() { return books; }
-        public void setBooks(List<Book> books) { this.books = books; }
+        public List<BookDTO> getBooks() { return books; }
+        public void setBooks(List<BookDTO> books) { this.books = books; }
     }
 }
