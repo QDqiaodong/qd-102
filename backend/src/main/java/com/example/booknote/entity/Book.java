@@ -51,6 +51,9 @@ public class Book {
     
     @OneToMany(mappedBy = "book", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Note> notes = new ArrayList<>();
+
+    @OneToMany(mappedBy = "book", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ReadingPlan> readingPlans = new ArrayList<>();
     
     @PrePersist
     protected void onCreate() {

@@ -83,4 +83,19 @@ export const repeatedNoteApi = {
   getStats: () => client.get('/repeated-notes/stats')
 }
 
+export const readingPlanApi = {
+  getPlansByBook: (bookId) => client.get(`/reading-plans/book/${bookId}`),
+  getLatestPlanByBook: (bookId) => client.get(`/reading-plans/book/${bookId}/latest`),
+  getPlanById: (planId) => client.get(`/reading-plans/${planId}`),
+  createPlan: (bookId, plan) => client.post(`/reading-plans/book/${bookId}`, plan),
+  updatePlan: (planId, plan) => client.put(`/reading-plans/${planId}`, plan),
+  deletePlan: (planId) => client.delete(`/reading-plans/${planId}`),
+  addSegment: (planId, segment) => client.post(`/reading-plans/${planId}/segments`, segment),
+  updateSegment: (segmentId, segment) => client.put(`/reading-plans/segments/${segmentId}`, segment),
+  updateSegmentProgress: (segmentId, currentPage) => client.patch(`/reading-plans/segments/${segmentId}/progress`, null, { params: { currentPage } }),
+  deleteSegment: (segmentId) => client.delete(`/reading-plans/segments/${segmentId}`),
+  reorderSegments: (planId, segmentIds) => client.put(`/reading-plans/${planId}/segments/reorder`, segmentIds),
+  generatePlan: (bookId, pagesPerSegment, totalPages, startDate) => client.post(`/reading-plans/book/${bookId}/generate`, null, { params: { pagesPerSegment, totalPages, startDate } })
+}
+
 export default client
