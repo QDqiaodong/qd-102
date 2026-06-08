@@ -4,6 +4,7 @@ package com.example.booknote.controller;
 import com.example.booknote.dto.NoteDTO;
 import com.example.booknote.entity.Note;
 import com.example.booknote.service.NoteService;
+import com.example.booknote.service.NoteReadingProgressService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -16,8 +17,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-
-import com.example.booknote.service.NoteService;
 
 class NotePageDTO {
     private List<NoteDTO> content;
@@ -44,6 +43,9 @@ public class NoteController {
     
     @Autowired
     private NoteService noteService;
+
+    @Autowired
+    private NoteReadingProgressService progressService;
     
     @GetMapping("/book/{bookId}")
     public ResponseEntity<NotePageDTO> getNotesByBookId(
@@ -122,6 +124,34 @@ public class NoteController {
     @DeleteMapping("/draft/{bookId}")
     public ResponseEntity<Void> deleteDraft(@PathVariable Long bookId) {
         noteService.deleteDraft(bookId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/book/{bookId}/reading-progress")
+    public ResponseEntity<NoteReadingProgressService.ProgressDTO> getReadingProgress(@PathVariable Long bookId) {
+        return progressService.getProgressByBookId(bookId)
+                .map(progress -> ResponseEntity.ok(new NoteReadingProgressService.ProgressDTO(progress)))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/book/{bookId}/reading-progress")
+    public ResponseEntity<NoteReadingProgressService.ProgressDTO> saveReadingProgress(
+            @PathVariable Long bookId,
+            @RequestBody Map<String, Object> request) {
+        Long lastNoteId = request.get("lastNoteId") != null ?
+                Long.valueOf(request.get("lastNoteId").toString()) : null;
+        Integer notePageIndex = request.get("notePageIndex") != null ?
+                Integer.valueOf(request.get("notePageIndex").toString()) : null;
+        Integer scrollTop = request.get("scrollTop") != null ?
+                Integer.valueOf(request.get("scrollTop").toString()) : null;
+
+        NoteReadingProgress progress = progressService.saveProgress(bookId, lastNoteId, notePageIndex, scrollTop);
+        return ResponseEntity.ok(new NoteReadingProgressService.ProgressDTO(progress));
+    }
+
+    @DeleteMapping("/book/{bookId}/reading-progress")
+    public ResponseEntity<Void> deleteReadingProgress(@PathVariable Long bookId) {
+        progressService.deleteProgress(bookId);
         return ResponseEntity.noContent().build();
     }
 }

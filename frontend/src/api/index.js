@@ -34,7 +34,11 @@ export const noteApi = {
   // 草稿缓存API
   saveDraft: (bookId, draft) => client.post(`/notes/draft/${bookId}`, draft),
   getDraft: (bookId) => client.get(`/notes/draft/${bookId}`),
-  deleteDraft: (bookId) => client.delete(`/notes/draft/${bookId}`)
+  deleteDraft: (bookId) => client.delete(`/notes/draft/${bookId}`),
+  // 阅读进度API
+  getReadingProgress: (bookId) => client.get(`/notes/book/${bookId}/reading-progress`),
+  saveReadingProgress: (bookId, progress) => client.post(`/notes/book/${bookId}/reading-progress`, progress),
+  deleteReadingProgress: (bookId) => client.delete(`/notes/book/${bookId}/reading-progress`)
 }
 
 export const tagApi = {

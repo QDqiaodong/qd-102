@@ -312,6 +312,17 @@
           已加载 {{ notes.length }} / {{ totalNotes }} 条
         </div>
 
+        <div v-if="showContinueTip && readingProgress" class="continue-tip">
+          <div class="continue-tip-content">
+            <span class="continue-icon">📖</span>
+            <span class="continue-text">上次读到第 {{ readingProgress.notePageIndex + 1 }} 页，共 {{ totalNotes }} 条笔记</span>
+          </div>
+          <div class="continue-tip-actions">
+            <button @click="continueReading" class="continue-btn">继续阅读</button>
+            <button @click="dismissContinueTip" class="dismiss-btn">×</button>
+          </div>
+        </div>
+
         <transition name="fade" mode="out-in">
           <div v-if="notes.length > 0 && noteViewMode === 'card'" key="card" class="notes-card-grid">
             <div v-for="note in notes" :key="note.id" class="note-card" @click="openNoteViewer(note)">
@@ -398,6 +409,11 @@ const totalNotes = ref(0)
 const notesLoading = ref(false)
 const pageSize = 5
 const noteViewMode = ref('card')
+
+const readingProgress = ref(null)
+const showContinueTip = ref(false)
+const isContinuing = ref(false)
+let saveProgressTimer = null
 
 const viewingNote = ref(null)
 const isNoteInRepeatList = ref(false)
@@ -834,9 +850,9 @@ const timelineGroups = computed(() => {
   return groups
 })
 
-const loadNotes = async (reset = false) => {
+const loadNotes = async (reset = false, targetPage = null) => {
   const id = window.location.pathname.split('/')[2]
-  const nextPage = reset ? 0 : currentPage.value + 1
+  const nextPage = targetPage !== null ? targetPage : (reset ? 0 : currentPage.value + 1)
 
   notesLoading.value = true
   try {
@@ -847,7 +863,11 @@ const loadNotes = async (reset = false) => {
     const pageData = response.data
     const nextNotes = pageData.content || []
 
-    notes.value = reset ? nextNotes : [...notes.value, ...nextNotes]
+    if (reset || targetPage !== null) {
+      notes.value = nextNotes
+    } else {
+      notes.value = [...notes.value, ...nextNotes]
+    }
     currentPage.value = nextPage
     totalPages.value = pageData.totalPages || 0
     totalNotes.value = pageData.totalElements || 0
@@ -858,6 +878,79 @@ const loadNotes = async (reset = false) => {
   }
 }
 
+const loadReadingProgress = async () => {
+  const id = window.location.pathname.split('/')[2]
+  try {
+    const response = await noteApi.getReadingProgress(id)
+    readingProgress.value = response.data
+    if (readingProgress.value && readingProgress.value.notePageIndex != null && readingProgress.value.notePageIndex > 0) {
+      showContinueTip.value = true
+    }
+  } catch (error) {
+    if (error.response && error.response.status === 404) {
+      readingProgress.value = null
+    } else {
+      console.error('加载阅读进度失败:', error)
+    }
+  }
+}
+
+const saveReadingProgress = async () => {
+  const id = window.location.pathname.split('/')[2]
+  if (!id || notes.value.length === 0) return
+
+  const scrollTop = window.scrollY || window.pageYOffset
+  const lastNoteId = notes.value.length > 0 ? notes.value[notes.value.length - 1].id : null
+
+  const progress = {
+    lastNoteId: lastNoteId,
+    notePageIndex: currentPage.value,
+    scrollTop: scrollTop
+  }
+
+  try {
+    await noteApi.saveReadingProgress(id, progress)
+    readingProgress.value = progress
+  } catch (error) {
+    console.error('保存阅读进度失败:', error)
+  }
+}
+
+const debounceSaveProgress = () => {
+  if (saveProgressTimer) clearTimeout(saveProgressTimer)
+  saveProgressTimer = setTimeout(saveReadingProgress, 500)
+}
+
+const continueReading = async () => {
+  if (!readingProgress.value || readingProgress.value.notePageIndex == null) return
+
+  isContinuing.value = true
+  showContinueTip.value = false
+
+  const targetPage = readingProgress.value.notePageIndex
+  await loadNotes(true, targetPage)
+
+  nextTick(() => {
+    if (readingProgress.value.scrollTop) {
+      window.scrollTo({
+        top: readingProgress.value.scrollTop,
+        behavior: 'smooth'
+      })
+    }
+    isContinuing.value = false
+  })
+}
+
+const dismissContinueTip = () => {
+  showContinueTip.value = false
+}
+
+const handlePageScroll = () => {
+  if (!viewingNote.value) {
+    debounceSaveProgress()
+  }
+}
+
 const loadBook = async () => {
   const id = window.location.pathname.split('/')[2]
   try {
@@ -865,7 +958,8 @@ const loadBook = async () => {
     book.value = bookRes.data
     await Promise.all([
       loadNotes(true),
-      loadReadingPlan()
+      loadReadingPlan(),
+      loadReadingProgress()
     ])
   } catch (error) {
     console.error('加载失败:', error)
@@ -875,6 +969,7 @@ const loadBook = async () => {
 const loadMoreNotes = async () => {
   if (!hasMoreNotes.value || notesLoading.value) return
   await loadNotes(false)
+  saveReadingProgress()
 }
 
 const goBack = () => {
@@ -935,13 +1030,19 @@ const handleRemoveFromRepeat = async (noteId) => {
   }
 }
 
-onMounted(loadBook)
+onMounted(() => {
+  loadBook()
+  window.addEventListener('scroll', handlePageScroll, { passive: true })
+})
 
 onBeforeUnmount(() => {
   if (scrollTimer) clearTimeout(scrollTimer)
+  if (saveProgressTimer) clearTimeout(saveProgressTimer)
   if (noteContentRef.value) {
     noteContentRef.value.removeEventListener('scroll', handleNoteScroll)
   }
+  window.removeEventListener('scroll', handlePageScroll)
+  saveReadingProgress()
 })
 </script>
 
@@ -1655,6 +1756,75 @@ onBeforeUnmount(() => {
 .load-more-btn:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+.continue-tip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.continue-tip-content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.continue-icon {
+  font-size: 1.2rem;
+}
+
+.continue-text {
+  color: #3f51b5;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.continue-tip-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.continue-btn {
+  padding: 0.4rem 1rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: transform 0.2s;
+}
+
+.continue-btn:hover {
+  transform: translateY(-1px);
+}
+
+.dismiss-btn {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+  color: #999;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.dismiss-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #666;
 }
 
 .note-tag {
