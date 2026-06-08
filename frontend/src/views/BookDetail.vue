@@ -312,10 +312,10 @@
           已加载 {{ notes.length }} / {{ totalNotes }} 条
         </div>
 
-        <div v-if="showContinueTip && readingProgress" class="continue-tip">
+        <div v-if="showContinueTip && hasSavedReadingProgress" class="continue-tip">
           <div class="continue-tip-content">
             <span class="continue-icon">📖</span>
-            <span class="continue-text">上次读到第 {{ readingProgress.notePageIndex + 1 }} 页，共 {{ totalNotes }} 条笔记</span>
+            <span class="continue-text">上次读到第 {{ (readingProgress.notePageIndex ?? 0) + 1 }} 页，共 {{ totalNotes }} 条笔记</span>
           </div>
           <div class="continue-tip-actions">
             <button @click="continueReading" class="continue-btn">继续阅读</button>
@@ -325,7 +325,7 @@
 
         <transition name="fade" mode="out-in">
           <div v-if="notes.length > 0 && noteViewMode === 'card'" key="card" class="notes-card-grid">
-            <div v-for="note in notes" :key="note.id" class="note-card" @click="openNoteViewer(note)">
+            <div v-for="note in notes" :key="note.id" :data-note-id="note.id" class="note-card" @click="openNoteViewer(note)">
               <div class="note-card-header">
                 <h3 class="note-card-title">{{ note.title }}</h3>
                 <span v-if="note.pageNumber" class="note-card-page">P.{{ note.pageNumber }}</span>
@@ -354,7 +354,7 @@
                 <span class="timeline-count">{{ group.length }} 条笔记</span>
               </div>
               <div class="timeline-items">
-                <div v-for="note in group" :key="note.id" class="timeline-item" @click="openNoteViewer(note)">
+                <div v-for="note in group" :key="note.id" :data-note-id="note.id" class="timeline-item" @click="openNoteViewer(note)">
                   <div class="timeline-item-marker"></div>
                   <div class="timeline-item-content">
                     <div class="timeline-item-header">
@@ -445,6 +445,16 @@ const segmentForm = ref({
   endPage: null,
   estimatedCompletionDate: '',
   currentPage: null
+})
+
+const getBookId = () => window.location.pathname.split('/')[2]
+
+const hasSavedReadingProgress = computed(() => {
+  if (!readingProgress.value) return false
+
+  return readingProgress.value.notePageIndex != null ||
+    readingProgress.value.lastNoteId != null ||
+    (readingProgress.value.scrollTop != null && readingProgress.value.scrollTop > 0)
 })
 
 const visibleTocItems = computed(() => {
@@ -850,17 +860,52 @@ const timelineGroups = computed(() => {
   return groups
 })
 
+const fetchNotesPage = async (page) => {
+  const response = await noteApi.getNotesByBook(getBookId(), {
+    page,
+    size: pageSize
+  })
+
+  return response.data || { content: [], totalPages: 0, totalElements: 0 }
+}
+
+const findVisibleNoteId = () => {
+  const noteElements = Array.from(document.querySelectorAll('[data-note-id]'))
+  if (noteElements.length === 0) return null
+
+  const firstVisible = noteElements.find((element) => {
+    const rect = element.getBoundingClientRect()
+    return rect.bottom >= 120
+  })
+
+  return Number(firstVisible?.dataset.noteId || noteElements[noteElements.length - 1]?.dataset.noteId || 0) || null
+}
+
+const scrollToSavedAnchor = () => {
+  if (!readingProgress.value) return
+
+  if (readingProgress.value.lastNoteId != null) {
+    const anchor = document.querySelector(`[data-note-id="${readingProgress.value.lastNoteId}"]`)
+    if (anchor) {
+      anchor.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+  }
+
+  if (readingProgress.value.scrollTop != null) {
+    window.scrollTo({
+      top: readingProgress.value.scrollTop,
+      behavior: 'smooth'
+    })
+  }
+}
+
 const loadNotes = async (reset = false, targetPage = null) => {
-  const id = window.location.pathname.split('/')[2]
   const nextPage = targetPage !== null ? targetPage : (reset ? 0 : currentPage.value + 1)
 
   notesLoading.value = true
   try {
-    const response = await noteApi.getNotesByBook(id, {
-      page: nextPage,
-      size: pageSize
-    })
-    const pageData = response.data
+    const pageData = await fetchNotesPage(nextPage)
     const nextNotes = pageData.content || []
 
     if (reset || targetPage !== null) {
@@ -879,11 +924,10 @@ const loadNotes = async (reset = false, targetPage = null) => {
 }
 
 const loadReadingProgress = async () => {
-  const id = window.location.pathname.split('/')[2]
   try {
-    const response = await noteApi.getReadingProgress(id)
+    const response = await noteApi.getReadingProgress(getBookId())
     readingProgress.value = response.data
-    if (readingProgress.value && readingProgress.value.notePageIndex != null && readingProgress.value.notePageIndex > 0) {
+    if (hasSavedReadingProgress.value) {
       showContinueTip.value = true
     }
   } catch (error) {
@@ -896,21 +940,20 @@ const loadReadingProgress = async () => {
 }
 
 const saveReadingProgress = async () => {
-  const id = window.location.pathname.split('/')[2]
+  const id = getBookId()
   if (!id || notes.value.length === 0) return
 
-  const scrollTop = window.scrollY || window.pageYOffset
-  const lastNoteId = notes.value.length > 0 ? notes.value[notes.value.length - 1].id : null
-
   const progress = {
-    lastNoteId: lastNoteId,
+    lastNoteId: findVisibleNoteId(),
     notePageIndex: currentPage.value,
-    scrollTop: scrollTop
+    scrollTop: Math.round(window.scrollY || window.pageYOffset || 0)
   }
 
+  if (!hasSavedReadingProgress.value && progress.lastNoteId == null && progress.scrollTop === 0) return
+
   try {
-    await noteApi.saveReadingProgress(id, progress)
-    readingProgress.value = progress
+    const response = await noteApi.saveReadingProgress(id, progress)
+    readingProgress.value = response.data
   } catch (error) {
     console.error('保存阅读进度失败:', error)
   }
@@ -927,18 +970,29 @@ const continueReading = async () => {
   isContinuing.value = true
   showContinueTip.value = false
 
-  const targetPage = readingProgress.value.notePageIndex
-  await loadNotes(true, targetPage)
+  const targetPage = Math.max(readingProgress.value.notePageIndex, 0)
+  notesLoading.value = true
 
-  nextTick(() => {
-    if (readingProgress.value.scrollTop) {
-      window.scrollTo({
-        top: readingProgress.value.scrollTop,
-        behavior: 'smooth'
-      })
-    }
+  try {
+    const pageRequests = Array.from({ length: targetPage + 1 }, (_, pageIndex) => fetchNotesPage(pageIndex))
+    const pageResults = await Promise.all(pageRequests)
+    const mergedNotes = pageResults.flatMap((pageData) => pageData.content || [])
+    const lastPageData = pageResults[pageResults.length - 1] || { totalPages: 0, totalElements: 0 }
+
+    notes.value = mergedNotes
+    currentPage.value = targetPage
+    totalPages.value = lastPageData.totalPages || 0
+    totalNotes.value = lastPageData.totalElements || 0
+
+    await nextTick()
+    scrollToSavedAnchor()
+  } catch (error) {
+    console.error('继续阅读失败:', error)
+    showContinueTip.value = true
+  } finally {
+    notesLoading.value = false
     isContinuing.value = false
-  })
+  }
 }
 
 const dismissContinueTip = () => {
@@ -952,9 +1006,8 @@ const handlePageScroll = () => {
 }
 
 const loadBook = async () => {
-  const id = window.location.pathname.split('/')[2]
   try {
-    const bookRes = await bookApi.getBookById(id)
+    const bookRes = await bookApi.getBookById(getBookId())
     book.value = bookRes.data
     await Promise.all([
       loadNotes(true),
@@ -985,8 +1038,7 @@ const handleBack = () => {
 }
 
 const goToNewNote = () => {
-  const id = window.location.pathname.split('/')[2]
-  window.location.href = `/book/${id}/note/new`
+  window.location.href = `/book/${getBookId()}/note/new`
 }
 
 const goToEditNote = (noteId) => {
