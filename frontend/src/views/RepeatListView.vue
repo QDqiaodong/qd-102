@@ -22,11 +22,11 @@
     </div>
 
     <div class="tab-buttons">
-      <button :class="['tab-btn', { active: activeTab === 'all' }" @click="activeTab = 'all'">全部</button>
-      <button :class="['tab-btn', { active: activeTab === 'due' }" @click="activeTab = 'due'">
+      <button :class="['tab-btn', { active: activeTab === 'all' }]" @click="activeTab = 'all'">全部</button>
+      <button :class="['tab-btn', { active: activeTab === 'due' }]" @click="activeTab = 'due'">
         待复习 <span v-if="repeatList.dueCount > 0" class="badge">{{ repeatList.dueCount }}</span>
       </button>
-      <button :class="['tab-btn', { active: activeTab === 'upcoming' }" @click="activeTab = 'upcoming'">即将复习</button>
+      <button :class="['tab-btn', { active: activeTab === 'upcoming' }]" @click="activeTab = 'upcoming'">即将复习</button>
     </div>
 
     <div v-if="loading" class="loading">加载中...</div>
