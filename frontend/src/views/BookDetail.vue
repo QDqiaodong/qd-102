@@ -96,7 +96,193 @@
         </div>
       </div>
 
-      <div v-else class="notes-section">
+      <div v-if="!viewingNote" class="reading-plan-section">
+        <div class="section-header">
+          <h2>📖 阅读计划</h2>
+          <div class="section-header-right">
+            <button 
+              v-if="!readingPlan && !showPlanForm" 
+              @click="showPlanForm = true" 
+              class="add-note-btn"
+            >
+              + 创建计划
+            </button>
+            <button 
+              v-if="readingPlan && !showPlanForm" 
+              @click="showSegmentForm = true" 
+              class="add-note-btn"
+            >
+              + 添加分段
+            </button>
+          </div>
+        </div>
+
+        <div v-if="!readingPlan && !showPlanForm" class="empty-plan">
+          <div class="empty-plan-icon">📋</div>
+          <p>还没有阅读计划，创建一个分段计划让阅读更有节奏</p>
+          <button @click="showPlanForm = true" class="create-plan-btn">创建阅读计划</button>
+        </div>
+
+        <div v-if="showPlanForm" class="plan-form-card">
+          <h3>{{ editingPlan ? '编辑计划' : '创建阅读计划' }}</h3>
+          <div class="form-row">
+            <div class="form-item">
+              <label>计划名称</label>
+              <input v-model="planForm.title" type="text" placeholder="例如：第一阶段阅读计划" />
+            </div>
+            <div class="form-item">
+              <label>总页数</label>
+              <input v-model.number="planForm.totalPages" type="number" min="1" placeholder="书籍总页数" />
+            </div>
+          </div>
+          <div class="form-actions-row">
+            <button @click="cancelPlanForm" class="cancel-btn-sm">取消</button>
+            <button @click="submitPlanForm" class="submit-btn-sm">{{ editingPlan ? '保存' : '创建' }}</button>
+          </div>
+          <div class="quick-generate">
+            <span class="quick-label">快速生成：</span>
+            <div class="quick-options">
+              <input v-model.number="quickPages" type="number" min="10" placeholder="每段页数" class="quick-input" />
+              <span class="quick-sep">页 / 段</span>
+              <button @click="generatePlan" class="quick-btn">自动生成</button>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="readingPlan" class="plan-overview">
+          <div class="plan-header-row">
+            <div class="plan-title-wrap">
+              <h3 class="plan-title">{{ readingPlan.title }}</h3>
+              <span class="plan-meta">共 {{ readingPlan.totalSegments }} 段 · {{ readingPlan.totalPages }} 页</span>
+            </div>
+            <div class="plan-actions">
+              <button @click="editPlan" class="icon-btn" title="编辑">✏️</button>
+              <button @click="deletePlan" class="icon-btn" title="删除">🗑️</button>
+            </div>
+          </div>
+          <div class="plan-progress-row">
+              <div class="plan-progress-info">
+                <span class="progress-num">{{ readingPlan.overallProgress || 0 }}%</span>
+                <span class="progress-text">整体进度</span>
+              </div>
+              <div class="plan-progress-bar">
+                <div class="plan-progress-fill" :style="{ width: (readingPlan.overallProgress || 0) + '%' }"></div>
+              </div>
+              <div class="plan-segment-count">
+                <span class="count-done">{{ readingPlan.completedSegments || 0 }}</span>
+                <span class="count-sep">/</span>
+                <span class="count-total">{{ readingPlan.totalSegments || 0 }}</span>
+                <span class="count-label">段已完成</span>
+              </div>
+            </div>
+        </div>
+
+        <div v-if="readingPlan && readingPlan.segments && readingPlan.segments.length > 0" class="segments-list">
+          <div 
+            v-for="(segment, index) in readingPlan.segments" 
+            :key="segment.id" 
+            class="segment-card"
+            :class="[`status-${segment.status?.toLowerCase()}`]"
+          >
+            <div class="segment-header">
+              <div class="segment-num">{{ index + 1 }}</div>
+              <div class="segment-info">
+                <h4 class="segment-title">{{ segment.segmentTitle || '分段 ' + (index + 1) }}</h4>
+                <div class="segment-pages">
+                  <span class="page-range">P.{{ segment.startPage }} - P.{{ segment.endPage }}</span>
+                  <span class="page-count">（{{ segment.pageCount }} 页）</span>
+                </div>
+              </div>
+              <div class="segment-status" :class="segment.status?.toLowerCase()">
+                {{ getSegmentStatusLabel(segment.status) }}
+              </div>
+            </div>
+
+            <div class="segment-progress">
+              <div class="seg-progress-bar">
+                <div class="seg-progress-fill" :style="{ width: (segment.progressPercent || 0) + '%' }"></div>
+              </div>
+              <span class="seg-progress-text">{{ segment.progressPercent || 0 }}%</span>
+            </div>
+
+            <div class="segment-dates">
+              <div v-if="segment.estimatedCompletionDate" class="date-item">
+                <span class="date-label">预计完成：</span>
+                <span class="date-value">{{ formatDate(segment.estimatedCompletionDate) }}</span>
+              </div>
+              <div v-if="segment.actualCompletionDate" class="date-item actual">
+                <span class="date-label">实际完成：</span>
+                <span class="date-value">{{ formatDate(segment.actualCompletionDate) }}</span>
+              </div>
+            </div>
+
+            <div v-if="updatingSegmentId === segment.id" class="segment-update-form">
+              <div class="update-input-row">
+                <label>当前读到第</label>
+                <input 
+                  v-model.number="updateCurrentPage" 
+                  type="number" 
+                  :min="segment.startPage" 
+                  :max="segment.endPage"
+                  class="update-input"
+                />
+                <label>页</label>
+              </div>
+              <div class="update-actions">
+                <button @click="cancelUpdateSegment" class="cancel-btn-sm">取消</button>
+                <button @click="submitUpdateSegment(segment.id)" class="submit-btn-sm">更新</button>
+              </div>
+            </div>
+
+            <div class="segment-actions">
+              <button @click="startUpdateSegment(segment)" class="seg-action-btn">
+                📝 更新进度
+              </button>
+              <button @click="editSegment(segment)" class="seg-action-btn">
+                ✏️ 编辑
+              </button>
+              <button @click="deleteSegment(segment.id)" class="seg-action-btn danger">
+                🗑️ 删除
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="showSegmentForm" class="segment-form-modal">
+          <div class="modal-backdrop" @click="showSegmentForm = false"></div>
+          <div class="segment-form-card">
+            <h3>{{ editingSegment ? '编辑分段' : '添加分段' }}</h3>
+            <div class="form-item full">
+              <label>分段标题</label>
+              <input v-model="segmentForm.segmentTitle" type="text" placeholder="例如：第一章 引言" />
+            </div>
+            <div class="form-row">
+              <div class="form-item">
+                <label>起始页</label>
+                <input v-model.number="segmentForm.startPage" type="number" min="1" placeholder="起始页码" />
+              </div>
+              <div class="form-item">
+                <label>结束页</label>
+                <input v-model.number="segmentForm.endPage" type="number" min="1" placeholder="结束页码" />
+              </div>
+            </div>
+            <div class="form-item full">
+              <label>预计完成日期</label>
+              <input v-model="segmentForm.estimatedCompletionDate" type="date" />
+            </div>
+            <div class="form-item full" v-if="editingSegment">
+              <label>当前页码</label>
+              <input v-model.number="segmentForm.currentPage" type="number" min="0" placeholder="当前读到的页码" />
+            </div>
+            <div class="form-actions-row">
+              <button @click="showSegmentForm = false" class="cancel-btn-sm">取消</button>
+              <button @click="submitSegmentForm" class="submit-btn-sm">{{ editingSegment ? '保存' : '添加' }}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="!viewingNote" class="notes-section">
         <div class="section-header">
           <h2>读书笔记</h2>
           <div class="section-header-right">
@@ -202,7 +388,7 @@
 
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { bookApi, noteApi, repeatedNoteApi } from '../api'
+import { bookApi, noteApi, repeatedNoteApi, readingPlanApi } from '../api'
 
 const book = ref(null)
 const notes = ref([])
@@ -222,6 +408,28 @@ const activeTocIndex = ref(-1)
 const foldedIndexes = ref([])
 const allFolded = ref(false)
 let scrollTimer = null
+
+const readingPlan = ref(null)
+const showPlanForm = ref(false)
+const showSegmentForm = ref(false)
+const editingPlan = ref(false)
+const editingSegment = ref(null)
+const updatingSegmentId = ref(null)
+const updateCurrentPage = ref(0)
+const quickPages = ref(50)
+
+const planForm = ref({
+  title: '',
+  totalPages: null
+})
+
+const segmentForm = ref({
+  segmentTitle: '',
+  startPage: null,
+  endPage: null,
+  estimatedCompletionDate: '',
+  currentPage: null
+})
 
 const visibleTocItems = computed(() => {
   const result = []
@@ -428,6 +636,190 @@ const formatDate = (dateStr) => {
   return date.toLocaleDateString('zh-CN')
 }
 
+const getSegmentStatusLabel = (status) => {
+  const labels = {
+    NOT_STARTED: '未开始',
+    IN_PROGRESS: '进行中',
+    COMPLETED: '已完成'
+  }
+  return labels[status] || status
+}
+
+const loadReadingPlan = async () => {
+  const id = window.location.pathname.split('/')[2]
+  try {
+    const response = await readingPlanApi.getLatestPlanByBook(id)
+    readingPlan.value = response.data
+  } catch (error) {
+    if (error.response && error.response.status === 404) {
+      readingPlan.value = null
+    } else {
+      console.error('加载阅读计划失败:', error)
+    }
+  }
+}
+
+const submitPlanForm = async () => {
+  const id = window.location.pathname.split('/')[2]
+  if (!planForm.value.totalPages || planForm.value.totalPages <= 0) {
+    alert('请输入有效的总页数')
+    return
+  }
+  if (!planForm.value.title) {
+    planForm.value.title = book.value.title + ' - 阅读计划'
+  }
+  try {
+    if (editingPlan.value && readingPlan.value) {
+      await readingPlanApi.updatePlan(readingPlan.value.id, planForm.value)
+    } else {
+      await readingPlanApi.createPlan(id, planForm.value)
+    }
+    await loadReadingPlan()
+    await loadBook()
+    cancelPlanForm()
+  } catch (error) {
+    console.error('保存计划失败:', error)
+    alert('保存失败，请重试')
+  }
+}
+
+const cancelPlanForm = () => {
+  showPlanForm.value = false
+  editingPlan.value = false
+  planForm.value = {
+    title: '',
+    totalPages: null
+  }
+}
+
+const editPlan = () => {
+  if (!readingPlan.value) return
+  planForm.value = {
+    title: readingPlan.value.title,
+    totalPages: readingPlan.value.totalPages
+  }
+  editingPlan.value = true
+  showPlanForm.value = true
+}
+
+const deletePlan = async () => {
+  if (!confirm('确定要删除这个阅读计划吗？所有分段也将被删除。')) return
+  try {
+    await readingPlanApi.deletePlan(readingPlan.value.id)
+    readingPlan.value = null
+    await loadBook()
+  } catch (error) {
+    console.error('删除计划失败:', error)
+    alert('删除失败，请重试')
+  }
+}
+
+const generatePlan = async () => {
+  const id = window.location.pathname.split('/')[2]
+  if (!quickPages.value || quickPages.value <= 0) {
+    alert('请输入有效的每段页数')
+    return
+  }
+  const totalPages = planForm.value.totalPages
+  if (!totalPages || totalPages <= 0) {
+    alert('请先输入总页数')
+    return
+  }
+  try {
+    const response = await readingPlanApi.generatePlan(id, quickPages.value, totalPages)
+    readingPlan.value = response.data
+    cancelPlanForm()
+    await loadBook()
+  } catch (error) {
+    console.error('生成计划失败:', error)
+    alert('生成失败，请重试')
+  }
+}
+
+const submitSegmentForm = async () => {
+  if (!segmentForm.value.startPage || !segmentForm.value.endPage) {
+    alert('请填写起始页和结束页')
+    return
+  }
+  if (segmentForm.value.startPage >= segmentForm.value.endPage) {
+    alert('结束页必须大于起始页')
+    return
+  }
+  try {
+    if (editingSegment.value) {
+      await readingPlanApi.updateSegment(editingSegment.value.id, segmentForm.value)
+    } else {
+      await readingPlanApi.addSegment(readingPlan.value.id, segmentForm.value)
+    }
+    await loadReadingPlan()
+    showSegmentForm.value = false
+    editingSegment.value = null
+    resetSegmentForm()
+  } catch (error) {
+    console.error('保存分段失败:', error)
+    alert('保存失败，请重试')
+  }
+}
+
+const resetSegmentForm = () => {
+  segmentForm.value = {
+    segmentTitle: '',
+    startPage: null,
+    endPage: null,
+    estimatedCompletionDate: '',
+    currentPage: null
+  }
+}
+
+const editSegment = (segment) => {
+  editingSegment.value = segment
+  segmentForm.value = {
+    segmentTitle: segment.segmentTitle || '',
+    startPage: segment.startPage,
+    endPage: segment.endPage,
+    estimatedCompletionDate: segment.estimatedCompletionDate || '',
+    currentPage: segment.currentPage
+  }
+  showSegmentForm.value = true
+}
+
+const deleteSegment = async (segmentId) => {
+  if (!confirm('确定要删除这个分段吗？')) return
+  try {
+    await readingPlanApi.deleteSegment(segmentId)
+    await loadReadingPlan()
+  } catch (error) {
+    console.error('删除分段失败:', error)
+    alert('删除失败，请重试')
+  }
+}
+
+const startUpdateSegment = (segment) => {
+  updatingSegmentId.value = segment.id
+  updateCurrentPage.value = segment.currentPage != null ? segment.currentPage : segment.startPage
+}
+
+const cancelUpdateSegment = () => {
+  updatingSegmentId.value = null
+  updateCurrentPage.value = 0
+}
+
+const submitUpdateSegment = async (segmentId) => {
+  if (updateCurrentPage.value == null || updateCurrentPage.value < 0) {
+    alert('请输入有效的页码')
+    return
+  }
+  try {
+    await readingPlanApi.updateSegmentProgress(segmentId, updateCurrentPage.value)
+    await loadReadingPlan()
+    await loadBook()
+    cancelUpdateSegment()
+  } catch (error) {
+    console.error('更新进度失败:', error)
+    alert('更新失败，请重试')
+  }
+}
+
 const hasMoreNotes = computed(() => currentPage.value + 1 < totalPages.value)
 
 const timelineGroups = computed(() => {
@@ -471,7 +863,10 @@ const loadBook = async () => {
   try {
     const bookRes = await bookApi.getBookById(id)
     book.value = bookRes.data
-    await loadNotes(true)
+    await Promise.all([
+      loadNotes(true),
+      loadReadingPlan()
+    ])
   } catch (error) {
     console.error('加载失败:', error)
   }
@@ -1297,5 +1692,564 @@ onBeforeUnmount(() => {
   text-align: center;
   padding: 4rem;
   color: #999;
+}
+
+.reading-plan-section {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  margin-bottom: 2rem;
+}
+
+.empty-plan {
+  text-align: center;
+  padding: 3rem 2rem;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+  border-radius: 12px;
+  border: 2px dashed #ddd;
+}
+
+.empty-plan-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.empty-plan p {
+  color: #999;
+  margin-bottom: 1.5rem;
+}
+
+.create-plan-btn {
+  padding: 0.75rem 2rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: transform 0.2s;
+}
+
+.create-plan-btn:hover {
+  transform: translateY(-2px);
+}
+
+.plan-form-card {
+  background: #f9f9f9;
+  padding: 1.5rem;
+  border-radius: 10px;
+  border: 1px solid #eee;
+}
+
+.plan-form-card h3 {
+  margin: 0 0 1rem 0;
+  color: #333;
+  font-size: 1.1rem;
+}
+
+.form-row {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.form-item {
+  flex: 1;
+}
+
+.form-item.full {
+  flex: 100%;
+  margin-bottom: 1rem;
+}
+
+.form-item label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #666;
+}
+
+.form-item input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  box-sizing: border-box;
+}
+
+.form-item input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.form-actions-row {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.cancel-btn-sm,
+.submit-btn-sm {
+  padding: 0.5rem 1.25rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.cancel-btn-sm {
+  background: #f0f0f0;
+  color: #666;
+}
+
+.submit-btn-sm {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.quick-generate {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed #ddd;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.quick-label {
+  font-size: 0.85rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.quick-options {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.quick-input {
+  width: 70px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.quick-sep {
+  font-size: 0.85rem;
+  color: #999;
+}
+
+.quick-btn {
+  padding: 0.4rem 1rem;
+  background: #eef2ff;
+  color: #667eea;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.quick-btn:hover {
+  background: #e0e7ff;
+}
+
+.plan-overview {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
+  padding: 1.5rem;
+  border-radius: 10px;
+  margin-bottom: 1.5rem;
+}
+
+.plan-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.plan-title-wrap {
+  flex: 1;
+}
+
+.plan-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.2rem;
+  color: #333;
+}
+
+.plan-meta {
+  font-size: 0.9rem;
+  color: #888;
+}
+
+.plan-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  transition: all 0.2s;
+}
+
+.icon-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.plan-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.plan-progress-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 80px;
+}
+
+.progress-num {
+  font-size: 1.8rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.progress-text {
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.plan-progress-bar {
+  flex: 1;
+  height: 16px;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.plan-progress-fill {
+  height: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px;
+  transition: width 0.5s ease;
+}
+
+.plan-segment-count {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  min-width: 100px;
+  justify-content: flex-end;
+}
+
+.count-done {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #2e7d32;
+}
+
+.count-sep {
+  color: #ccc;
+  font-size: 1.1rem;
+}
+
+.count-total {
+  font-size: 1.1rem;
+  color: #999;
+}
+
+.count-label {
+  font-size: 0.8rem;
+  color: #888;
+  margin-left: 0.25rem;
+}
+
+.segments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.segment-card {
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  padding: 1.25rem;
+  transition: all 0.2s;
+}
+
+.segment-card:hover {
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.segment-card.status-completed {
+  border-left: 4px solid #4caf50;
+}
+
+.segment-card.status-in_progress {
+  border-left: 4px solid #ff9800;
+}
+
+.segment-card.status-not_started {
+  border-left: 4px solid #bdbdbd;
+}
+
+.segment-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.segment-num {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.segment-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.segment-title {
+  margin: 0 0 0.35rem 0;
+  font-size: 1rem;
+  color: #333;
+}
+
+.segment-pages {
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.page-range {
+  margin-right: 0.25rem;
+}
+
+.page-count {
+  color: #aaa;
+}
+
+.segment-status {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.segment-status.not_started {
+  background: #f5f5f5;
+  color: #757575;
+}
+
+.segment-status.in_progress {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.segment-status.completed {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.segment-progress {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.seg-progress-bar {
+  flex: 1;
+  height: 8px;
+  background: #eee;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.seg-progress-fill {
+  height: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+
+.seg-progress-text {
+  min-width: 50px;
+  text-align: right;
+  font-size: 0.85rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.segment-dates {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.date-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.date-label {
+  color: #999;
+}
+
+.date-value {
+  color: #666;
+}
+
+.date-item.actual .date-value {
+  color: #2e7d32;
+  font-weight: 500;
+}
+
+.segment-update-form {
+  background: #eef2ff;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.update-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.update-input-row label {
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.update-input {
+  width: 80px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #c7d2fe;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  text-align: center;
+  background: white;
+}
+
+.update-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.segment-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.seg-action-btn {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid #e0e0e0;
+  background: white;
+  color: #666;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.seg-action-btn:hover {
+  background: #f5f5f5;
+  border-color: #ddd;
+}
+
+.seg-action-btn.danger {
+  color: #c62828;
+  border-color: #ffcdd2;
+}
+
+.seg-action-btn.danger:hover {
+  background: #ffebee;
+}
+
+.segment-form-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+}
+
+.segment-form-card {
+  position: relative;
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  width: 90%;
+  max-width: 450px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+}
+
+.segment-form-card h3 {
+  margin: 0 0 1.5rem 0;
+  color: #333;
+  font-size: 1.2rem;
 }
 </style>
