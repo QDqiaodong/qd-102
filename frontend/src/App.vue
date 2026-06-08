@@ -17,6 +17,7 @@
           </div>
           <nav class="nav-links">
             <a href="/" class="nav-link">书籍库</a>
+            <a href="/repeat" class="nav-link">复读清单</a>
             <a href="/wake-up" class="nav-link">待回访</a>
             <a href="/cards" class="nav-link">书摘墙</a>
             <a href="/similar-notes" class="nav-link">相似笔记</a>

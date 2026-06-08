@@ -74,4 +74,13 @@ export const similarNoteApi = {
   getSimilarityStatistics: (params = {}) => client.get('/similar-notes/statistics', { params })
 }
 
+export const repeatedNoteApi = {
+  getAllRepeatedNotes: () => client.get('/repeated-notes'),
+  getByNoteId: (noteId) => client.get(`/repeated-notes/note/${noteId}`),
+  addToRepeatList: (noteId) => client.post(`/repeated-notes/note/${noteId}`),
+  removeFromRepeatList: (noteId) => client.delete(`/repeated-notes/note/${noteId}`),
+  markAsReviewed: (noteId) => client.post(`/repeated-notes/note/${noteId}/review`),
+  getStats: () => client.get('/repeated-notes/stats')
+}
+
 export default client

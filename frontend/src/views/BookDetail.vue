@@ -75,6 +75,20 @@
             </div>
             <div ref="noteContentRef" class="note-full-content" v-html="viewingNote.content"></div>
             <div class="note-viewer-actions">
+              <button 
+                v-if="isNoteInRepeatList" 
+                @click="handleRemoveFromRepeat(viewingNote.id)" 
+                class="repeat-btn active"
+              >
+                🔁 已加入复读
+              </button>
+              <button 
+                v-else 
+                @click="handleAddToRepeat(viewingNote.id)" 
+                class="repeat-btn"
+              >
+                ➕ 加入复读清单
+              </button>
               <button @click="goToEditNote(viewingNote.id)" class="edit-note-btn">编辑笔记</button>
               <button @click="deleteNote(viewingNote.id)" class="delete-note-btn">删除笔记</button>
             </div>
@@ -188,7 +202,7 @@
 
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { bookApi, noteApi } from '../api'
+import { bookApi, noteApi, repeatedNoteApi } from '../api'
 
 const book = ref(null)
 const notes = ref([])
@@ -200,6 +214,7 @@ const pageSize = 5
 const noteViewMode = ref('card')
 
 const viewingNote = ref(null)
+const isNoteInRepeatList = ref(false)
 const noteContentRef = ref(null)
 const showToc = ref(true)
 const currentTocItems = ref([])
@@ -358,12 +373,19 @@ const updateActiveHeading = () => {
   }
 }
 
-const openNoteViewer = (note) => {
+const openNoteViewer = async (note) => {
   viewingNote.value = note
   extractToc(note.content)
   activeTocIndex.value = -1
   foldedIndexes.value = []
   allFolded.value = false
+  
+  try {
+    await repeatedNoteApi.getByNoteId(note.id)
+    isNoteInRepeatList.value = true
+  } catch (error) {
+    isNoteInRepeatList.value = false
+  }
   
   nextTick(() => {
     if (noteContentRef.value) {
@@ -494,6 +516,27 @@ const deleteNote = async (id) => {
     await loadBook()
   } catch (error) {
     console.error('删除失败:', error)
+  }
+}
+
+const handleAddToRepeat = async (noteId) => {
+  try {
+    await repeatedNoteApi.addToRepeatList(noteId)
+    isNoteInRepeatList.value = true
+  } catch (error) {
+    console.error('加入复读清单失败:', error)
+    alert('加入复读清单失败')
+  }
+}
+
+const handleRemoveFromRepeat = async (noteId) => {
+  if (!confirm('确定要从复读清单中移除这条笔记吗？')) return
+  try {
+    await repeatedNoteApi.removeFromRepeatList(noteId)
+    isNoteInRepeatList.value = false
+  } catch (error) {
+    console.error('移除复读清单失败:', error)
+    alert('移除失败')
   }
 }
 
@@ -852,6 +895,27 @@ onBeforeUnmount(() => {
 .note-viewer-actions .delete-note-btn {
   background: #ffebee;
   color: #c62828;
+}
+
+.note-viewer-actions .repeat-btn {
+  padding: 0.75rem 1.5rem;
+  border: 1px solid #e0e0e0;
+  background: white;
+  color: #555;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s;
+}
+
+.note-viewer-actions .repeat-btn:hover {
+  background: #f5f5f5;
+}
+
+.note-viewer-actions .repeat-btn.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
 }
 
 .notes-section {

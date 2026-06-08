@@ -10,12 +10,18 @@ import TagGraphView from '../views/TagGraphView.vue'
 import CardWall from '../views/CardWall.vue'
 import SimilarNotes from '../views/SimilarNotes.vue'
 import WakeUpListView from '../views/WakeUpListView.vue'
+import RepeatListView from '../views/RepeatListView.vue'
 
 const routes = [
   {
     path: '/',
     name: 'BookList',
     component: BookList
+  },
+  {
+    path: '/repeat',
+    name: 'RepeatList',
+    component: RepeatListView
   },
   {
     path: '/wake-up',
