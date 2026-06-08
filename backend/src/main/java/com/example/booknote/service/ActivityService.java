@@ -295,17 +295,23 @@ public class ActivityService {
         Map<Long, List<Note>> notesByBook = recentNotes.stream()
                 .collect(Collectors.groupingBy(note -> note.getBook().getId()));
 
+        Map<Long, Book> bookMap = allBooks.stream()
+                .collect(Collectors.toMap(Book::getId, b -> b));
+
         List<ActiveBookItem> activeBooks = new ArrayList<>();
 
-        for (Book book : allBooks) {
-            List<Note> bookNotes = notesByBook.getOrDefault(book.getId(), Collections.emptyList());
+        for (Map.Entry<Long, List<Note>> entry : notesByBook.entrySet()) {
+            Book book = bookMap.get(entry.getKey());
+            if (book == null) continue;
 
-            LocalDateTime latestActivity = getLatestActivityTime(book, bookNotes, now);
-            long daysSinceLastActivity = ChronoUnit.DAYS.between(latestActivity.toLocalDate(), now.toLocalDate());
+            List<Note> bookNotes = entry.getValue();
 
-            if (daysSinceLastActivity > days && bookNotes.isEmpty()) {
-                continue;
-            }
+            LocalDateTime latestNoteTime = bookNotes.stream()
+                    .map(Note::getCreatedAt)
+                    .max(LocalDateTime::compareTo)
+                    .orElse(now);
+
+            long daysSinceLastActivity = ChronoUnit.DAYS.between(latestNoteTime.toLocalDate(), now.toLocalDate());
 
             double noteScore = calculateNoteScore(bookNotes, now, days);
             double progressScore = calculateProgressScore(book, bookNotes, now, days);
@@ -317,9 +323,9 @@ public class ActivityService {
                 continue;
             }
 
-            int progressChange = calculateProgressChange(book, bookNotes);
+            int pagesCovered = calculatePagesCovered(bookNotes);
 
-            List<String> reasons = generateActivityReasons(bookNotes.size(), progressChange, daysSinceLastActivity);
+            List<String> reasons = generateActivityReasons(bookNotes.size(), pagesCovered, daysSinceLastActivity);
 
             BookDTO bookDTO = BookDTO.fromEntity(book, (long) bookNotes.size());
 
@@ -327,7 +333,7 @@ public class ActivityService {
             item.setBook(bookDTO);
             item.setActivityScore(round(totalScore, 2));
             item.setNoteCount(bookNotes.size());
-            item.setProgressChange(progressChange);
+            item.setProgressChange(pagesCovered);
             item.setDaysSinceLastActivity(daysSinceLastActivity);
             item.setActivityReasons(reasons);
 
@@ -353,20 +359,6 @@ public class ActivityService {
         return new ActiveRankingData(rankedBooks, allBooks.size(), days, summary);
     }
 
-    private LocalDateTime getLatestActivityTime(Book book, List<Note> notes, LocalDateTime now) {
-        LocalDateTime latestNoteTime = notes.stream()
-                .map(Note::getCreatedAt)
-                .max(LocalDateTime::compareTo)
-                .orElse(null);
-
-        LocalDateTime bookUpdateTime = book.getUpdatedAt();
-
-        if (latestNoteTime != null && latestNoteTime.isAfter(bookUpdateTime)) {
-            return latestNoteTime;
-        }
-        return bookUpdateTime;
-    }
-
     private double calculateNoteScore(List<Note> notes, LocalDateTime now, int days) {
         double score = 0;
         for (Note note : notes) {
@@ -379,46 +371,48 @@ public class ActivityService {
     }
 
     private double calculateProgressScore(Book book, List<Note> notes, LocalDateTime now, int days) {
-        if (book.getProgress() == null || book.getProgress() == 0) {
+        if (notes.isEmpty()) {
             return 0;
         }
 
-        int progressChange = calculateProgressChange(book, notes);
-        if (progressChange <= 0) {
+        long pagesWithNotes = notes.stream()
+                .map(Note::getPageNumber)
+                .filter(Objects::nonNull)
+                .distinct()
+                .count();
+
+        if (pagesWithNotes == 0) {
             return 0;
         }
 
         LocalDateTime latestNoteTime = notes.stream()
                 .map(Note::getCreatedAt)
                 .max(LocalDateTime::compareTo)
-                .orElse(book.getUpdatedAt());
+                .orElse(now);
 
         long daysAgo = ChronoUnit.DAYS.between(latestNoteTime.toLocalDate(), now.toLocalDate());
         double weight = 1.0 - (daysAgo * 0.3 / days);
         if (weight < 0.2) weight = 0.2;
 
-        return progressChange * 2 * weight;
+        double baseScore = pagesWithNotes * 3;
+
+        if (book.getProgress() != null && book.getProgress() > 0) {
+            baseScore += 5;
+        }
+
+        return baseScore * weight;
     }
 
-    private int calculateProgressChange(Book book, List<Note> notes) {
+    private int calculatePagesCovered(List<Note> notes) {
         if (notes.isEmpty()) {
             return 0;
         }
 
-        List<Integer> pageNumbers = notes.stream()
+        return (int) notes.stream()
                 .map(Note::getPageNumber)
                 .filter(Objects::nonNull)
-                .sorted()
-                .collect(Collectors.toList());
-
-        if (pageNumbers.size() < 2) {
-            return 0;
-        }
-
-        int minPage = pageNumbers.get(0);
-        int maxPage = pageNumbers.get(pageNumbers.size() - 1);
-
-        return Math.max(0, maxPage - minPage);
+                .distinct()
+                .count();
     }
 
     private double calculateRecencyScore(long daysSinceLastActivity, int days) {
@@ -429,15 +423,15 @@ public class ActivityService {
         return 30 * ratio * ratio;
     }
 
-    private List<String> generateActivityReasons(int noteCount, int progressChange, long daysSince) {
+    private List<String> generateActivityReasons(int noteCount, int pagesCovered, long daysSince) {
         List<String> reasons = new ArrayList<>();
 
         if (noteCount > 0) {
             reasons.add("近期产出 " + noteCount + " 条笔记");
         }
 
-        if (progressChange > 0) {
-            reasons.add("阅读进度推进约 " + progressChange + " 页");
+        if (pagesCovered > 0) {
+            reasons.add("阅读覆盖约 " + pagesCovered + " 页");
         }
 
         if (daysSince == 0) {
