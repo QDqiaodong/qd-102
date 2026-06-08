@@ -19,6 +19,8 @@ import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 @Service
 public class ActivityService {
@@ -258,5 +260,202 @@ public class ActivityService {
         int totalCount = stagnantReading.size() + neglectedWantToRead.size() + readWithoutSummary.size();
 
         return new WakeUpListData(stagnantReading, neglectedWantToRead, readWithoutSummary, totalCount);
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ActiveBookItem {
+        private int rank;
+        private BookDTO book;
+        private double activityScore;
+        private int noteCount;
+        private int progressChange;
+        private long daysSinceLastActivity;
+        private List<String> activityReasons;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ActiveRankingData {
+        private List<ActiveBookItem> rankings;
+        private int totalBooks;
+        private int daysRange;
+        private Map<String, Object> summary;
+    }
+
+    public ActiveRankingData getActiveRanking(int days, int limit) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime startDate = now.minusDays(days);
+
+        List<Book> allBooks = bookRepository.findAll();
+        List<Note> recentNotes = noteRepository.findByCreatedAtBetweenWithBook(startDate, now);
+
+        Map<Long, List<Note>> notesByBook = recentNotes.stream()
+                .collect(Collectors.groupingBy(note -> note.getBook().getId()));
+
+        List<ActiveBookItem> activeBooks = new ArrayList<>();
+
+        for (Book book : allBooks) {
+            List<Note> bookNotes = notesByBook.getOrDefault(book.getId(), Collections.emptyList());
+
+            LocalDateTime latestActivity = getLatestActivityTime(book, bookNotes, now);
+            long daysSinceLastActivity = ChronoUnit.DAYS.between(latestActivity.toLocalDate(), now.toLocalDate());
+
+            if (daysSinceLastActivity > days && bookNotes.isEmpty()) {
+                continue;
+            }
+
+            double noteScore = calculateNoteScore(bookNotes, now, days);
+            double progressScore = calculateProgressScore(book, bookNotes, now, days);
+            double recencyScore = calculateRecencyScore(daysSinceLastActivity, days);
+
+            double totalScore = noteScore + progressScore + recencyScore;
+
+            if (totalScore <= 0) {
+                continue;
+            }
+
+            int progressChange = calculateProgressChange(book, bookNotes);
+
+            List<String> reasons = generateActivityReasons(bookNotes.size(), progressChange, daysSinceLastActivity);
+
+            BookDTO bookDTO = BookDTO.fromEntity(book, (long) bookNotes.size());
+
+            ActiveBookItem item = new ActiveBookItem();
+            item.setBook(bookDTO);
+            item.setActivityScore(round(totalScore, 2));
+            item.setNoteCount(bookNotes.size());
+            item.setProgressChange(progressChange);
+            item.setDaysSinceLastActivity(daysSinceLastActivity);
+            item.setActivityReasons(reasons);
+
+            activeBooks.add(item);
+        }
+
+        activeBooks.sort(Comparator.comparingDouble(ActiveBookItem::getActivityScore).reversed());
+
+        for (int i = 0; i < activeBooks.size(); i++) {
+            activeBooks.get(i).setRank(i + 1);
+        }
+
+        List<ActiveBookItem> rankedBooks = activeBooks.stream()
+                .limit(limit)
+                .collect(Collectors.toList());
+
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("totalActiveBooks", activeBooks.size());
+        summary.put("totalNotes", recentNotes.size());
+        summary.put("averageScore", activeBooks.isEmpty() ? 0 :
+                round(activeBooks.stream().mapToDouble(ActiveBookItem::getActivityScore).average().orElse(0), 2));
+
+        return new ActiveRankingData(rankedBooks, allBooks.size(), days, summary);
+    }
+
+    private LocalDateTime getLatestActivityTime(Book book, List<Note> notes, LocalDateTime now) {
+        LocalDateTime latestNoteTime = notes.stream()
+                .map(Note::getCreatedAt)
+                .max(LocalDateTime::compareTo)
+                .orElse(null);
+
+        LocalDateTime bookUpdateTime = book.getUpdatedAt();
+
+        if (latestNoteTime != null && latestNoteTime.isAfter(bookUpdateTime)) {
+            return latestNoteTime;
+        }
+        return bookUpdateTime;
+    }
+
+    private double calculateNoteScore(List<Note> notes, LocalDateTime now, int days) {
+        double score = 0;
+        for (Note note : notes) {
+            long daysAgo = ChronoUnit.DAYS.between(note.getCreatedAt().toLocalDate(), now.toLocalDate());
+            double weight = 1.0 - (daysAgo * 0.5 / days);
+            if (weight < 0.1) weight = 0.1;
+            score += 10 * weight;
+        }
+        return score;
+    }
+
+    private double calculateProgressScore(Book book, List<Note> notes, LocalDateTime now, int days) {
+        if (book.getProgress() == null || book.getProgress() == 0) {
+            return 0;
+        }
+
+        int progressChange = calculateProgressChange(book, notes);
+        if (progressChange <= 0) {
+            return 0;
+        }
+
+        LocalDateTime latestNoteTime = notes.stream()
+                .map(Note::getCreatedAt)
+                .max(LocalDateTime::compareTo)
+                .orElse(book.getUpdatedAt());
+
+        long daysAgo = ChronoUnit.DAYS.between(latestNoteTime.toLocalDate(), now.toLocalDate());
+        double weight = 1.0 - (daysAgo * 0.3 / days);
+        if (weight < 0.2) weight = 0.2;
+
+        return progressChange * 2 * weight;
+    }
+
+    private int calculateProgressChange(Book book, List<Note> notes) {
+        if (notes.isEmpty()) {
+            return 0;
+        }
+
+        List<Integer> pageNumbers = notes.stream()
+                .map(Note::getPageNumber)
+                .filter(Objects::nonNull)
+                .sorted()
+                .collect(Collectors.toList());
+
+        if (pageNumbers.size() < 2) {
+            return 0;
+        }
+
+        int minPage = pageNumbers.get(0);
+        int maxPage = pageNumbers.get(pageNumbers.size() - 1);
+
+        return Math.max(0, maxPage - minPage);
+    }
+
+    private double calculateRecencyScore(long daysSinceLastActivity, int days) {
+        if (daysSinceLastActivity < 0) daysSinceLastActivity = 0;
+        if (daysSinceLastActivity > days) return 0;
+
+        double ratio = 1.0 - (double) daysSinceLastActivity / days;
+        return 30 * ratio * ratio;
+    }
+
+    private List<String> generateActivityReasons(int noteCount, int progressChange, long daysSince) {
+        List<String> reasons = new ArrayList<>();
+
+        if (noteCount > 0) {
+            reasons.add("近期产出 " + noteCount + " 条笔记");
+        }
+
+        if (progressChange > 0) {
+            reasons.add("阅读进度推进约 " + progressChange + " 页");
+        }
+
+        if (daysSince == 0) {
+            reasons.add("今日仍在活跃");
+        } else if (daysSince <= 3) {
+            reasons.add("近 " + daysSince + " 天有更新");
+        }
+
+        if (reasons.isEmpty()) {
+            reasons.add("近期有阅读活动");
+        }
+
+        return reasons;
+    }
+
+    private double round(double value, int places) {
+        BigDecimal bd = BigDecimal.valueOf(value);
+        bd = bd.setScale(places, RoundingMode.HALF_UP);
+        return bd.doubleValue();
     }
 }

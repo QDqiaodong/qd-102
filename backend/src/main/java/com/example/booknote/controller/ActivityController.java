@@ -31,4 +31,11 @@ public class ActivityController {
             @RequestParam(defaultValue = "30") int daysThreshold) {
         return ResponseEntity.ok(activityService.getWakeUpList(daysThreshold));
     }
+
+    @GetMapping("/ranking")
+    public ResponseEntity<ActivityService.ActiveRankingData> getActiveRanking(
+            @RequestParam(defaultValue = "30") int days,
+            @RequestParam(defaultValue = "10") int limit) {
+        return ResponseEntity.ok(activityService.getActiveRanking(days, limit));
+    }
 }

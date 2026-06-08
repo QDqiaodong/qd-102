@@ -51,7 +51,8 @@ export const tagApi = {
 export const activityApi = {
   getHeatmap: (months = 12) => client.get('/activity/heatmap', { params: { months } }),
   getDateDetail: (date) => client.get(`/activity/date/${date}`),
-  getWakeUpList: (daysThreshold = 30) => client.get('/activity/wake-up-list', { params: { daysThreshold } })
+  getWakeUpList: (daysThreshold = 30) => client.get('/activity/wake-up-list', { params: { daysThreshold } }),
+  getActiveRanking: (days = 30, limit = 10) => client.get('/activity/ranking', { params: { days, limit } })
 }
 
 export const searchApi = {
